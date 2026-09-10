@@ -1,0 +1,96 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ════════════════════════════════════════════════════════
+         PERMISSIONS
+         Izin-izin yang dibutuhkan aplikasi DompetKu
+
+         BIND_NOTIFICATION_LISTENER_SERVICE:
+           Izin utama untuk membaca notifikasi dari semua aplikasi.
+           User harus aktifkan secara manual di Settings.
+
+         FOREGROUND_SERVICE:
+           Izin untuk menjalankan service di background.
+         ════════════════════════════════════════════════════════ -->
+    <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
+    <application
+        android:label="DompetKu"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
+
+        <!-- Activity utama Flutter -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+
+        <!-- Receiver reboot untuk restart listener -->
+        <receiver android:name="im.zoe.labs.flutter_notification_listener.RebootBroadcastReceiver"
+            android:enabled="true" android:exported="true" android:label="RestartServiceWhenStopped">
+            <intent-filter android:directBootAware="true">
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.REBOOT"/>
+            </intent-filter>
+        </receiver>
+
+        <!-- ════════════════════════════════════════════════════
+             NOTIFICATION LISTENER SERVICE
+             Service ini dijalankan oleh Android OS untuk
+             meneruskan semua notifikasi ke aplikasi kita.
+
+             Package flutter_notification_listener menggunakan
+             class: im.zoe.labs.flutter_notification_listener.NotificationsHandlerService
+             ════════════════════════════════════════════════════ -->
+        <service
+            android:name="im.zoe.labs.flutter_notification_listener.NotificationsHandlerService"
+            android:label="DompetKu QRIS Listener"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true"
+            android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="notification_listener"/>
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.app.notification_listener_settings"
+                android:value="android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS" />
+        </service>
+
+        <!-- Flutter embedding metadata -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>
