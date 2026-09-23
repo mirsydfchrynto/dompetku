@@ -129,7 +129,76 @@ void main() {
 
         expect(result, isNull);
       });
+
+      // ── DANA Bisnis ─────────────────────────────────────────
+      test('DANA Bisnis: parse notifikasi pembayaran diterima dari merchant', () {
+        final result = QrisParser.parse(
+          title: 'DANA Bisnis',
+          body: 'Pembayaran diterima Rp175.000,00 dari KURNIAWAN',
+          package: 'id.dana',
+        );
+
+        expect(result, isNotNull);
+        expect(result!.amount, equals(175000.0));
+        expect(result.appSource, equals('DANA Bisnis'));
+        expect(result.type, equals('dana_bisnis_in'));
+        expect(result.payerName, contains('KURNIAWAN'));
+      });
+
+      test('DANA Bisnis: parse notifikasi QRIS merchant Rp50.000', () {
+        final result = QrisParser.parse(
+          title: 'DANA for Business',
+          body: 'Pembayaran QRIS Rp50.000,00 sukses diterima dari Pelanggan Gastonyk',
+          package: 'id.dana',
+        );
+
+        expect(result, isNotNull);
+        expect(result!.amount, equals(50000.0));
+        expect(result.appSource, equals('DANA Bisnis'));
+        expect(result.type, equals('dana_bisnis_in'));
+      });
+
+      test('DANA Bisnis: parse notif "ada yang bayar" format singkat', () {
+        final result = QrisParser.parse(
+          title: 'DANA',
+          body: 'Ada yang bayar Rp115.000 di toko kamu',
+          package: 'id.dana',
+        );
+
+        expect(result, isNotNull);
+        expect(result!.amount, equals(115000.0));
+        expect(result.appSource, equals('DANA Bisnis'));
+        expect(result.type, equals('dana_bisnis_in'));
+      });
+
+      test('DANA Bisnis: parse notif transfer masuk ke merchant', () {
+        final result = QrisParser.parse(
+          title: 'DANA Bisnis',
+          body: 'Transaksi berhasil diterima. Rp 25.000,00 dari SITI RAHMAWATI',
+          package: 'id.dana',
+        );
+
+        expect(result, isNotNull);
+        expect(result!.amount, equals(25000.0));
+        expect(result.appSource, equals('DANA Bisnis'));
+        expect(result.type, equals('dana_bisnis_in'));
+        expect(result.payerName, contains('SITI'));
+      });
+
+      test('DANA personal tetap terbaca normal (bukan bisnis)', () {
+        final result = QrisParser.parse(
+          title: 'DANA',
+          body: 'Kamu menerima Saldo DANA sebesar Rp 50.000 dari BUDI SANTOSO.',
+          package: 'id.dana',
+        );
+
+        expect(result, isNotNull);
+        expect(result!.appSource, equals('DANA')); // bukan DANA Bisnis
+        expect(result.type, equals('dana_in'));
+        expect(result.payerName, contains('BUDI'));
+      });
     });
+
 
     // ── 3. OVO ───────────────────────────────────────────────
     group('OVO', () {

@@ -60,6 +60,16 @@ class QrisParser {
     caseSensitive: false,
   );
 
+  // Regex khusus DANA Bisnis — tangkap nama pembeli/pengirim dari notifikasi merchant QRIS
+  // Format: "Pembayaran diterima Rp xxx dari BUDI SANTOSO"
+  //         "Pelanggan ANDI membayar Rp xxx"
+  //         "DANA Bisnis: Rp xxx dari SITI RAHMAWATI"
+  //         "Ada yang bayar - KURNIAWAN"
+  static final RegExp _danaBisnisPayerPattern = RegExp(
+    r'(?:dari\s+pengirim|dikirim\s+oleh|pelanggan\s+|pembeli\s+|dari\s+|dari)([A-Z][A-Za-z0-9\s\.&]+?)(?=\s+(?:ke|telah|sebesar|pada|sudah|rek|rekening|membayar)|[.,;\n]|$)',
+    caseSensitive: false,
+  );
+
   // ── FILTER PROMO, SPAM, KEAMANAN & NON-FINANSIAL ────────────
   static final List<RegExp> _promoAndSpamPatterns = [
     // Promosi, diskon, kupon, voucher, flash sale
@@ -147,7 +157,8 @@ class QrisParser {
     parsers['com.gojek.gopay'] = gopayParser;
     parsers['com.gojek.app'] = gopayParser;
 
-    // ── DANA ──────────────────────────────────────────────────
+    // ── DANA (Personal) ───────────────────────────────────────
+    // Notifikasi DANA personal: "Kamu menerima Saldo DANA", "QRIS berhasil!"
     parsers['id.dana'] = _AppParser(
       name: 'DANA',
       baseCode: 'dana',
@@ -173,9 +184,19 @@ class QrisParser {
         'transfer ke',
         'berhasil transfer',
         'kirim uang',
+        // DANA Bisnis keywords (pakai package yang sama id.dana)
+        'dana bisnis',
+        'dana for business',
+        'pembayaran diterima',
+        'transaksi berhasil diterima',
+        'merchant',
+        'toko kamu',
+        'ada yang bayar',
+        'pelanggan membayar',
+        'pembeli membayar',
       ],
       amountPattern: _universalAmountPattern,
-      payerPattern: _universalPayerPattern,
+      payerPattern: _danaBisnisPayerPattern, // lebih pintar: tangkap nama pembeli juga
     );
 
     // ── OVO ───────────────────────────────────────────────────
@@ -598,28 +619,47 @@ class QrisParser {
         return null;
       }
 
+      // ── Deteksi DANA Bisnis secara otomatis ──────────────
+      // Jika package id.dana DAN title/body mengandung kata kunci bisnis,
+      // tampilkan sebagai "DANA Bisnis" dengan baseCode 'dana_bisnis'
+      final bool isDanaBisnis = package == 'id.dana' &&
+          (fullText.contains('dana bisnis') ||
+              fullText.contains('dana for business') ||
+              fullText.contains('pembayaran diterima') ||
+              fullText.contains('merchant') ||
+              fullText.contains('toko kamu') ||
+              fullText.contains('ada yang bayar') ||
+              fullText.contains('pelanggan membayar') ||
+              fullText.contains('pembeli membayar') ||
+              title.toLowerCase().contains('dana bisnis') ||
+              title.toLowerCase().contains('dana for business'));
+
+      final String resolvedName = isDanaBisnis ? 'DANA Bisnis' : parser.name;
+      final String resolvedBaseCode = isDanaBisnis ? 'dana_bisnis' : parser.baseCode;
+      final RegExp resolvedPayerPattern = isDanaBisnis
+          ? _danaBisnisPayerPattern
+          : (parser.payerPattern ?? _universalPayerPattern);
+
       // Ekstrak nama pembayar / pengirim (Uang Masuk)
       String partyName = 'Pelanggan';
 
-      if (parser.payerPattern != null) {
-        final fromBody = _extractPayer(body, parser.payerPattern!);
-        if (fromBody != 'Pelanggan') {
-          partyName = fromBody;
-        } else {
-          final fromTitle = _extractPayer(title, parser.payerPattern!);
-          if (fromTitle != 'Pelanggan') {
-            partyName = fromTitle;
-          }
+      final fromBody = _extractPayer(body, resolvedPayerPattern);
+      if (fromBody != 'Pelanggan') {
+        partyName = fromBody;
+      } else {
+        final fromTitle = _extractPayer(title, resolvedPayerPattern);
+        if (fromTitle != 'Pelanggan') {
+          partyName = fromTitle;
         }
       }
 
-      final typeCode = '${parser.baseCode}_in';
+      final typeCode = '${resolvedBaseCode}_in';
 
       return TransactionModel(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         amount: amount,
         type: typeCode,
-        appSource: parser.name,
+        appSource: resolvedName,
         payerName: partyName,
         dateTime: DateTime.now(),
         rawMessage: '$title\n$body',
