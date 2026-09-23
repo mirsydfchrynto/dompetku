@@ -42,6 +42,22 @@ class WebhookResult {
   }
 }
 
+class RetryQueueResult {
+  final int totalProcessed;
+  final int successCount;
+  final int failedCount;
+
+  const RetryQueueResult({
+    required this.totalProcessed,
+    required this.successCount,
+    required this.failedCount,
+  });
+
+  @override
+  String toString() =>
+      'Diproses: $totalProcessed, Berhasil: $successCount, Gagal: $failedCount';
+}
+
 class WebhookService {
   static const Duration _timeout = Duration(seconds: 10);
 
@@ -299,4 +315,77 @@ class WebhookService {
       }
     }
   }
+
+  static bool _isRetryingQueue = false;
+
+  /// Cek apakah proses retry queue sedang berjalan
+  static bool get isRetryingQueue => _isRetryingQueue;
+
+  /// Melakukan batch retry untuk semua transaksi berstatus 'failed' atau 'pending'.
+  /// Dilindungi oleh mutex `_isRetryingQueue` agar tidak terjadi race condition / dobel kirim.
+  static Future<RetryQueueResult> retryFailedTransactions({
+    http.Client? client,
+    int limit = 20,
+    Duration delayBetweenRequests = const Duration(milliseconds: 150),
+  }) async {
+    if (_isRetryingQueue) {
+      return const RetryQueueResult(
+        totalProcessed: 0,
+        successCount: 0,
+        failedCount: 0,
+      );
+    }
+
+    _isRetryingQueue = true;
+    int successCount = 0;
+    int failedCount = 0;
+
+    try {
+      final queue = await DatabaseService.getFailedOrPendingTransactions(
+        limit: limit,
+      );
+      if (queue.isEmpty) {
+        return const RetryQueueResult(
+          totalProcessed: 0,
+          successCount: 0,
+          failedCount: 0,
+        );
+      }
+
+      final httpClient = client ?? http.Client();
+
+      try {
+        for (final tx in queue) {
+          final result = await sendTransaction(
+            tx,
+            client: httpClient,
+            forceSend: true,
+          );
+
+          if (result.isSuccess) {
+            successCount++;
+          } else {
+            failedCount++;
+          }
+
+          if (delayBetweenRequests > Duration.zero) {
+            await Future.delayed(delayBetweenRequests);
+          }
+        }
+      } finally {
+        if (client == null) {
+          httpClient.close();
+        }
+      }
+
+      return RetryQueueResult(
+        totalProcessed: queue.length,
+        successCount: successCount,
+        failedCount: failedCount,
+      );
+    } finally {
+      _isRetryingQueue = false;
+    }
+  }
 }
+

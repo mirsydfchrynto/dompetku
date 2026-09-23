@@ -146,6 +146,71 @@ class DatabaseService {
     // clear() = hapus semua data di laci, tapi lacinya tetap ada
   }
 
+  // ── IDEMPOTENCY / DEDUPLICATION ───────────────────────────
+
+  /// Memeriksa apakah transaksi serupa sudah tercatat dalam kurun waktu [window] (default 90 detik).
+  /// Mencegah trigger webhook ganda akibat rebroadcast notifikasi Android OS.
+  /// Kriteria duplikat:
+  /// 1. Nominal sama (`amount == other.amount`)
+  /// 2. Sumber aplikasi sama (`appSource == other.appSource`)
+  /// 3. Selisih waktu transaksi <= [window]
+  /// 4. Salah satu terpenuhi:
+  ///    - Pesan mentah sama persis (`rawMessage == other.rawMessage`), ATAU
+  ///    - Nama pembayar spesifik sama persis (bukan fallback 'Pelanggan'/'Sistem')
+  static Future<bool> isDuplicateTransaction(
+    TransactionModel transaction, {
+    Duration window = const Duration(seconds: 90),
+  }) async {
+    final box = await _box;
+    final all = box.values;
+    for (final existing in all) {
+      if (existing.id == transaction.id) continue;
+      if (existing.amount == transaction.amount &&
+          existing.appSource == transaction.appSource) {
+        final timeDiff =
+            transaction.dateTime.difference(existing.dateTime).abs();
+        if (timeDiff <= window) {
+          final sameRaw =
+              existing.rawMessage.trim() == transaction.rawMessage.trim();
+          final hasValidPayer = transaction.payerName.isNotEmpty &&
+              transaction.payerName != 'Pelanggan' &&
+              transaction.payerName != 'Sistem';
+          final samePayer = hasValidPayer &&
+              (existing.payerName.toLowerCase() ==
+                  transaction.payerName.toLowerCase());
+
+          if (sameRaw || samePayer) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  // ── QUEUE / OFFLINE BUFFER QUERIES ────────────────────────
+
+  /// Ambil transaksi yang gagal dikirim ('failed') atau masih 'pending' ke webhook.
+  /// Diurutkan secara FIFO (terlama dahulu) agar urutan order di server tetap kronologis.
+  static Future<List<TransactionModel>> getFailedOrPendingTransactions({
+    int limit = 50,
+  }) async {
+    final box = await _box;
+    final all = box.values.toList();
+    all.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+    return all
+        .where(
+            (t) => t.webhookStatus == 'failed' || t.webhookStatus == 'pending')
+        .take(limit)
+        .toList();
+  }
+
+  /// Hitung jumlah transaksi berstatus 'failed' yang belum terkirim.
+  static Future<int> getFailedWebhookCount() async {
+    final box = await _box;
+    return box.values.where((t) => t.webhookStatus == 'failed').length;
+  }
+
   // ── SETTINGS (PENGATURAN WEBHOOK) ─────────────────────────
   static const String _settingsBoxName = 'settings';
 

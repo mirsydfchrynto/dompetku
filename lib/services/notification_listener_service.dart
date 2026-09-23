@@ -20,6 +20,7 @@
 // Docs: https://pub.dev/packages/flutter_notification_listener
 // ============================================================
 
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_notification_listener/flutter_notification_listener.dart';
 import 'qris_parser.dart';
@@ -114,7 +115,18 @@ class AppNotificationListenerService {
       );
 
       if (transaction != null) {
-        debugPrint('[DompetKu] QRIS Transaksi terdeteksi: ${transaction.appSource} Rp ${transaction.amount}');
+        final isDuplicate =
+            await DatabaseService.isDuplicateTransaction(transaction);
+        if (isDuplicate) {
+          debugPrint(
+            '[DompetKu] Transaksi duplikat diabaikan: ${transaction.appSource} '
+            'Rp ${transaction.amount} (${transaction.payerName})',
+          );
+          return;
+        }
+
+        debugPrint(
+            '[DompetKu] QRIS Transaksi terdeteksi: ${transaction.appSource} Rp ${transaction.amount}');
         await _processAndForward(transaction);
       } else {
         // Jika bukan format finansial standar, cek apakah user mengaktifkan tangkap semua notifikasi
@@ -130,6 +142,12 @@ class AppNotificationListenerService {
             rawMessage: title.isNotEmpty ? '$title: $body' : body,
             appPackage: package,
           );
+          final isDuplicate =
+              await DatabaseService.isDuplicateTransaction(rawTx);
+          if (isDuplicate) {
+            debugPrint('[DompetKu] Notifikasi raw duplikat diabaikan');
+            return;
+          }
           await _processAndForward(rawTx);
         }
       }
@@ -159,6 +177,16 @@ class AppNotificationListenerService {
         if (updated != null) {
           onTransactionUpdated?.call(updated);
         }
+
+        // Flush buffer offline jika ada antrean tertunda dari saat HP offline
+        unawaited(WebhookService.retryFailedTransactions().catchError((err) {
+          debugPrint('[DompetKu] Background retry error: $err');
+          return const RetryQueueResult(
+            totalProcessed: 0,
+            successCount: 0,
+            failedCount: 0,
+          );
+        }));
       }
     } catch (e, stack) {
       debugPrint('[DompetKu] Error in _processAndForward: $e\n$stack');

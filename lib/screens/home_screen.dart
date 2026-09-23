@@ -16,11 +16,13 @@
 //   StatefulWidget  = tampilan dinamis, bisa berubah saat ada data baru
 // ============================================================
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/transaction_model.dart';
 import '../services/database_service.dart';
 import '../services/notification_listener_service.dart';
+import '../services/webhook_service.dart';
 import '../services/csv_exporter.dart';
 import '../utils/formatter.dart';
 import '../widgets/transaction_card.dart';
@@ -55,6 +57,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String _webhookUrl = ''; // URL webhook backend
   bool _isWebhookEnabled = true; // Status aktif webhook
   bool _isListenerActive = false; // Status listener Android service
+  int _failedWebhookCount = 0; // Jumlah webhook gagal / belum terkirim
+  bool _isRetryingQueue = false; // Status proses retry antrean
+  Timer? _retryTimer; // Timer background auto-retry per 3 menit
 
   // Filter yang tersedia
   static const List<String> _filters = [
@@ -84,7 +89,12 @@ class _HomeScreenState extends State<HomeScreen> {
     // 1. Muat data dari database
     _loadData();
 
-    // 2. Daftarkan callback untuk notifikasi baru
+    // 2. Setup periodic auto-retry setiap 3 menit untuk transaksi offline buffer
+    _retryTimer = Timer.periodic(const Duration(minutes: 3), (_) {
+      _autoRetryQueue();
+    });
+
+    // 3. Daftarkan callback untuk notifikasi baru
     // Ketika ada transaksi baru dari NotificationListener,
     // fungsi ini dipanggil → refresh UI otomatis
     AppNotificationListenerService.onNewTransaction = (transaction) {
@@ -99,6 +109,8 @@ class _HomeScreenState extends State<HomeScreen> {
             _todayIncomeCount++;
           }
         });
+
+        _refreshFailedCount();
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -138,10 +150,11 @@ class _HomeScreenState extends State<HomeScreen> {
             _transactions[idx] = updated;
           }
         });
+        _refreshFailedCount();
       }
     };
 
-    // 3. Mulai listener (jika izin sudah ada)
+    // 4. Mulai listener (jika izin sudah ada)
     _startAndCheckListener();
   }
 
@@ -190,6 +203,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _retryTimer?.cancel();
     AppNotificationListenerService.onNewTransaction = null;
     AppNotificationListenerService.onTransactionUpdated = null;
     super.dispose();
@@ -206,6 +220,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final todayIncomeCount = await DatabaseService.getTodayIncomeCount();
     final webhookUrl = await DatabaseService.getWebhookUrl();
     final isWebhookEnabled = await DatabaseService.isAutoForwardEnabled();
+    final failedCount = await DatabaseService.getFailedWebhookCount();
 
     if (mounted) {
       setState(() {
@@ -214,8 +229,52 @@ class _HomeScreenState extends State<HomeScreen> {
         _todayIncomeCount = todayIncomeCount;
         _webhookUrl = webhookUrl;
         _isWebhookEnabled = isWebhookEnabled;
+        _failedWebhookCount = failedCount;
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _refreshFailedCount() async {
+    final count = await DatabaseService.getFailedWebhookCount();
+    if (mounted) {
+      setState(() => _failedWebhookCount = count);
+    }
+  }
+
+  Future<void> _autoRetryQueue() async {
+    if (_failedWebhookCount > 0 && !_isRetryingQueue && mounted) {
+      setState(() => _isRetryingQueue = true);
+      await WebhookService.retryFailedTransactions();
+      if (mounted) {
+        await _loadData();
+        setState(() => _isRetryingQueue = false);
+      }
+    }
+  }
+
+  Future<void> _manualRetryQueue() async {
+    if (_isRetryingQueue) return;
+    setState(() => _isRetryingQueue = true);
+    final result = await WebhookService.retryFailedTransactions();
+    if (mounted) {
+      await _loadData();
+      if (!mounted) return;
+      setState(() => _isRetryingQueue = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Pengiriman ulang selesai: ${result.successCount} berhasil, ${result.failedCount} gagal.',
+          ),
+          backgroundColor: result.failedCount == 0
+              ? const Color(0xFF00796B)
+              : Colors.orange.shade800,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
     }
   }
 
@@ -416,6 +475,102 @@ class _HomeScreenState extends State<HomeScreen> {
                       isLoading: _isLoading,
                     ),
                   ),
+
+                  // ── FAILED WEBHOOK OFFLINE BUFFER BANNER ──
+                  if (_failedWebhookCount > 0)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF8E1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: const Color(0xFFFFD54F),
+                              width: 1,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.orange.withValues(alpha: 0.06),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.cloud_off_rounded,
+                                color: Color(0xFFE65100),
+                                size: 22,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '$_failedWebhookCount Transaksi Belum Terkirim',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12.5,
+                                        color: Color(0xFFE65100),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 1),
+                                    Text(
+                                      'Tersimpan aman di buffer HP. Otomatis dicoba setiap 3 menit.',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.brown.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton(
+                                onPressed: _isRetryingQueue
+                                    ? null
+                                    : _manualRetryQueue,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFE65100),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  textStyle: const TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                child: _isRetryingQueue
+                                    ? const SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const Text('Kirim Ulang'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
 
                   // ── QUICK ACTION STRIP (2-KOLOM BERDAMPINGAN) ───
                   SliverToBoxAdapter(
