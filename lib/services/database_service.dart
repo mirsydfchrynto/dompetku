@@ -153,17 +153,19 @@ class DatabaseService {
     return await Hive.openBox(_settingsBoxName);
   }
 
-  /// Default webhook endpoint (Marsha Vercel 24/7 backend)
+  /// Default webhook endpoint (Gastonyk Official Webhook via ADB reverse / local)
   static const String defaultWebhookUrl =
-      'https://webhook-server-sand.vercel.app/webhook';
+      'http://127.0.0.1:8000/api/webhook/dompetku';
 
   /// Ambil URL endpoint webhook yang tersimpan.
   static Future<String> getWebhookUrl() async {
     final box = await _settingsBox;
     final saved = box.get('webhook_url') as String?;
     if (saved != null && saved.isNotEmpty) {
-      // Otomatis migrasi endpoint lokal/sementara yang sudah tidak aktif
-      if (saved.contains('loca.lt') || saved.contains('787e-103-3-222-52.ngrok-free.app')) {
+      // Otomatis migrasi endpoint lokal/sementara atau cloud demo ke Gastonyk
+      if (saved.contains('loca.lt') ||
+          saved.contains('787e-103-3-222-52.ngrok-free.app') ||
+          saved.contains('webhook-server-sand.vercel.app')) {
         await box.put('webhook_url', defaultWebhookUrl);
         return defaultWebhookUrl;
       }
@@ -262,15 +264,22 @@ class DatabaseService {
     return [
       WebhookPreset(
         id: 'preset_gastonyk',
-        name: 'Gastonyk Official Webhook',
+        name: 'Gastonyk Official (ADB USB 127.0.0.1)',
         url: 'http://127.0.0.1:8000/api/webhook/dompetku',
         payloadFormat: 'json_string',
         isDefault: true,
       ),
       WebhookPreset(
+        id: 'preset_gastonyk_wifi',
+        name: 'Gastonyk Wi-Fi (192.168.100.61)',
+        url: 'http://192.168.100.61:8000/api/webhook/dompetku',
+        payloadFormat: 'json_string',
+        isDefault: false,
+      ),
+      WebhookPreset(
         id: 'preset_marsha',
         name: 'Marsha (Vercel Cloud 24/7)',
-        url: defaultWebhookUrl,
+        url: 'https://webhook-server-sand.vercel.app/webhook',
         isDefault: false,
       ),
       WebhookPreset(
