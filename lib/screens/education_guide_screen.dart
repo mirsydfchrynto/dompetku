@@ -80,33 +80,39 @@ class _EducationGuideScreenState extends State<EducationGuideScreen>
       'package': 'com.bca',
       'message': 'm-Transfer: Rp 500.000,00 dari BUDI SANTOSO telah masuk ke rek 1234567890',
     },
-    // ── UANG KELUAR (OUTGOING) ────────────────────────────────
     {
-      'name': '📤 DANA Tarik Tunai Rp 50.000',
+      'name': '🏸 Gastonyk QRIS Rp 175.000',
+      'title': 'GoPay Merchant',
+      'package': 'com.gojek.gopay',
+      'message': 'Pembayaran QRIS Rp175.000 berhasil diterima untuk Gastonyk Official Store',
+    },
+    // ── FILTER ANTI-PENGELUARAN / UANG KELUAR (OTOMATIS DITOLAK) ─
+    {
+      'name': '🚫 Uji Tarik Tunai DANA (Ditolak)',
       'title': 'DANA',
       'package': 'id.dana',
       'message': 'Kamu berhasil menarik uang sebesar Rp 50.000 di Alfamart',
     },
     {
-      'name': '📤 SeaBank Transfer Keluar Rp 100.000',
+      'name': '🚫 Uji Transfer Keluar SeaBank (Ditolak)',
       'title': 'SeaBank',
       'package': 'com.seabank.seabank',
       'message': 'Kamu berhasil transfer ke rekening BCA sebesar Rp 100.000',
     },
     {
-      'name': '📤 BRImo Tarik Tunai Rp 100.000',
+      'name': '🚫 Uji Tarik Tunai BRImo (Ditolak)',
       'title': 'BRImo',
       'package': 'id.co.bri.brimo',
       'message': 'Tarik tunai Rp 100.000 berhasil di ATM BRI',
     },
     {
-      'name': '📤 Livin Bayar Tagihan Rp 150.000',
+      'name': '🚫 Uji Bayar Tagihan Livin (Ditolak)',
       'title': 'Livin',
       'package': 'id.co.mandiri.livin',
       'message': 'Pembayaran tagihan listrik Rp 150.000 berhasil',
     },
     {
-      'name': '📤 DANA Transfer ke Budi Rp 50.000',
+      'name': '🚫 Uji Transfer Keluar DANA (Ditolak)',
       'title': 'DANA',
       'package': 'id.dana',
       'message': 'Kamu berhasil transfer uang ke Budi sebesar Rp 50.000',
@@ -302,7 +308,7 @@ class _EducationGuideScreenState extends State<EducationGuideScreen>
         _StepCard(
           stepNumber: '1',
           title: 'Notifikasi Finansial di Android OS',
-          subtitle: 'Aplikasi bank/e-wallet memunculkan push notifikasi resmi saat transaksi masuk atau keluar terjadi.',
+          subtitle: 'Aplikasi bank/e-wallet memunculkan push notifikasi resmi saat transaksi pembayaran diterima.',
           codeSnippet: 'Title: "DANA"\nText: "Kamu menerima Saldo DANA sebesar Rp 50.000 dari BUDI"',
           badgeText: 'Level: Android System Notification',
           badgeColor: Colors.blue,
@@ -322,8 +328,8 @@ class _EducationGuideScreenState extends State<EducationGuideScreen>
         _StepCard(
           stepNumber: '3',
           title: 'Analisis QrisParser & Filter Cerdas',
-          subtitle: 'Mendeteksi nominal uang, membedakan arah transaksi (Masuk/Keluar), nama pihak, memblokir spam promo & OTP, serta menetapkan kanal dinamis (*_in / *_out).',
-          codeSnippet: 'final tx = QrisParser.parse(title, body, package);\n// Masuk:  tx.type = "dana_in"\n// Keluar: tx.type = "dana_out"',
+          subtitle: 'Mendeteksi nominal uang masuk, nama pembayar, memblokir pengeluaran/uang keluar, menolak spam promo & OTP, serta menetapkan kanal dinamis (*_in).',
+          codeSnippet: 'final tx = QrisParser.parse(title, body, package);\n// Masuk:  tx.type = "dana_in"\n// Keluar: diabaikan / null',
           badgeText: 'Level: Smart Parsing Engine',
           badgeColor: Colors.teal,
         ),
@@ -799,12 +805,12 @@ class _EducationGuideScreenState extends State<EducationGuideScreen>
       {
         'term': 'Webhook (Event-Driven HTTP POST)',
         'category': 'Integrasi Backend',
-        'desc': 'Metode pengiriman data otomatis layaknya kurir paket yang langsung mengantar begitu barang siap. Berbeda dengan polling (yang harus terus bolak-balik memeriksa server), webhook hanya menembak saat ada mutasi finansial (uang masuk atau keluar).'
+        'desc': 'Metode pengiriman data otomatis layaknya kurir paket yang langsung mengantar begitu transaksi tiba. Berbeda dengan polling (yang harus terus bolak-balik memeriksa server), webhook hanya menembak saat ada pembayaran masuk yang sah.'
       },
       {
         'term': 'Kode Kanal Dinamis (type)',
         'category': 'Model Transaksi',
-        'desc': 'Identitas pengenal sumber dan arah dana yang spesifik (misal: dana_in, dana_out, seabank_in, seabank_out, bca_in, bca_out). Memudahkan backend mengelompokkan laporan arus kas masuk maupun keluar per rekening tanpa tercampur.'
+        'desc': 'Identitas pengenal sumber dana yang spesifik (misal: dana_in, seabank_in, bca_in, mandiri_in). Memudahkan backend e-commerce Gastonyk memvalidasi pembayaran QRIS dan pesanan pelanggan secara instan.'
       },
       {
         'term': 'Universal Amount Parser (Regex)',

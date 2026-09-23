@@ -2,22 +2,22 @@
 // FILE: qris_parser.dart
 //
 // TUJUAN: "Detektif Pintar" yang membaca push notifikasi finansial
-//         (Uang Masuk & Uang Keluar) dari seluruh ekosistem bank
-//         dan e-wallet di Indonesia, sekaligus memfilter promosi,
-//         diskon, voucher, kode OTP, dan notifikasi non-finansial.
+//         UANG MASUK (QRIS Merchant & Transfer Masuk) dari seluruh
+//         ekosistem bank dan e-wallet di Indonesia, sekaligus memfilter
+//         dan menolak promosi, voucher, OTP, dan SEMUA PENGELUARAN /
+//         UANG KELUAR.
 //
 // FITUR UNGGULAN:
-//   1. Deteksi Akurat Uang Masuk (_in) & Uang Keluar (_out):
-//      - Uang Masuk: QRIS merchant, transfer masuk, top-up, money in.
-//      - Uang Keluar: Tarik tunai, transfer keluar, pembayaran di toko,
-//        debit rekening, pembayaran tagihan & pulsa.
+//   1. Deteksi Akurat Uang Masuk (_in):
+//      - QRIS merchant, transfer masuk, saldo masuk, top-up.
+//      - Menolak / mengabaikan semua transaksi keluar / pengeluaran.
 //   2. Filter & Blokir Notifikasi Promosi & Non-Finansial:
 //      - Menolak notifikasi promo, voucher, diskon, koin, cashback promo,
 //        flash sale, kode OTP/keamanan, pesan chat sosial, dan sistem.
 //   3. Universal Amount Parser:
 //      - Mendukung format Rupiah Rp, IDR, ribuan titik, desimal koma/titik.
 //   4. Smart Party Extractor:
-//      - Ekstraksi pengirim (Uang Masuk) & penerima/tujuan (Uang Keluar).
+//      - Ekstraksi nama pengirim / pembayar (Uang Masuk).
 //   5. 15+ Ekosistem Bank & E-Wallet Resmi + Smart Fallback.
 // ============================================================
 
@@ -575,8 +575,10 @@ class QrisParser {
       return null;
     }
 
-    // Tentukan apakah transaksi ini uang keluar
-    final isOutgoing = _isOutgoingTransaction(fullText);
+    // LANGKAH 0.5: Tolak semua pengeluaran / transaksi keluar (DompetKu murni mencatat uang masuk / QRIS)
+    if (_isOutgoingTransaction(fullText)) {
+      return null;
+    }
 
     // LANGKAH 1: Cari parser spesifik berdasarkan package Android
     final parser = _parsers[package];
@@ -596,14 +598,10 @@ class QrisParser {
         return null;
       }
 
-      // Ekstrak pihak terkait:
-      // - Jika uang keluar: cari nama penerima / tujuan penarikan / merchant
-      // - Jika uang masuk: cari nama pembayar / pengirim
-      String partyName = isOutgoing
-          ? _extractRecipient('$title $body', fullText)
-          : 'Pelanggan';
+      // Ekstrak nama pembayar / pengirim (Uang Masuk)
+      String partyName = 'Pelanggan';
 
-      if (!isOutgoing && parser.payerPattern != null) {
+      if (parser.payerPattern != null) {
         final fromBody = _extractPayer(body, parser.payerPattern!);
         if (fromBody != 'Pelanggan') {
           partyName = fromBody;
@@ -615,7 +613,7 @@ class QrisParser {
         }
       }
 
-      final typeCode = isOutgoing ? '${parser.baseCode}_out' : '${parser.baseCode}_in';
+      final typeCode = '${parser.baseCode}_in';
 
       return TransactionModel(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -629,7 +627,7 @@ class QrisParser {
       );
     }
 
-    // ── LANGKAH 2: Fallback Pintar (Generic In/Out Detector) ──
+    // ── LANGKAH 2: Fallback Pintar (Generic In Detector) ──────
     // Untuk bank atau fintech baru yang belum terdaftar di daftar spesifik
     final generalKeywords = [
       'qris',
@@ -646,19 +644,13 @@ class QrisParser {
       'kamu menerima',
       'telah masuk ke rekening',
       'masuk ke rekening',
-      'tarik tunai',
-      'menarik uang',
-      'tarik saldo',
-      'penarikan dana',
-      'transfer keluar',
-      'uang keluar',
-      'transfer ke',
-      'berhasil transfer',
-      'kamu telah membayar',
+      'saldo bertambah',
+      'ada uang masuk',
+      'kiriman uang',
     ];
 
     final isGeneralFinancial =
-        generalKeywords.any((keyword) => fullText.contains(keyword)) || isOutgoing;
+        generalKeywords.any((keyword) => fullText.contains(keyword));
 
     if (!isGeneralFinancial) {
       return null;
@@ -673,13 +665,11 @@ class QrisParser {
 
     final sourceName = title.isNotEmpty ? title : 'Pembayaran';
     final fallbackBase = _formatBaseCode(sourceName);
-    final fallbackType = isOutgoing ? '${fallbackBase}_out' : '${fallbackBase}_in';
+    final fallbackType = '${fallbackBase}_in';
 
-    final partyName = isOutgoing
-        ? _extractRecipient('$title $body', fullText)
-        : (_extractPayer(body, _universalPayerPattern) != 'Pelanggan'
-            ? _extractPayer(body, _universalPayerPattern)
-            : _extractPayer(title, _universalPayerPattern));
+    final partyName = _extractPayer(body, _universalPayerPattern) != 'Pelanggan'
+        ? _extractPayer(body, _universalPayerPattern)
+        : _extractPayer(title, _universalPayerPattern);
 
     return TransactionModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),

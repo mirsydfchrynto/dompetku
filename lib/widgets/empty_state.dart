@@ -54,7 +54,7 @@ class EmptyState extends StatelessWidget {
               const SizedBox(height: 6),
 
               Text(
-                'Notifikasi uang masuk & keluar bank/e-wallet\nakan tercatat otomatis saat mutasi terjadi.',
+                'Notifikasi pembayaran QRIS & transfer bank\nakan tercatat otomatis saat transaksi masuk.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 13,

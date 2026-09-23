@@ -91,19 +91,14 @@ class DatabaseService {
         .fold<double>(0.0, (sum, t) => sum + t.amount);
   }
 
-  /// Hitung total nominal semua transaksi keluar hari ini.
+  /// Hitung total nominal pengeluaran (selalu 0 karena DompetKu murni uang masuk).
   static Future<double> getTodayExpense() async {
-    final todayList = await getTodayTransactions();
-    return todayList
-        .where((t) => t.isOutgoing)
-        .fold<double>(0.0, (sum, t) => sum + t.amount);
+    return 0.0;
   }
 
-  /// Hitung total nominal semua transaksi hari ini (bersih = masuk - keluar).
+  /// Hitung total nominal transaksi hari ini (total pemasukan).
   static Future<double> getTodayTotal() async {
-    final income = await getTodayIncome();
-    final expense = await getTodayExpense();
-    return income - expense;
+    return await getTodayIncome();
   }
 
   /// Hitung jumlah transaksi hari ini.
@@ -117,10 +112,9 @@ class DatabaseService {
     return todayList.where((t) => t.isIncoming).length;
   }
 
-  /// Hitung jumlah transaksi keluar hari ini.
+  /// Hitung jumlah transaksi keluar hari ini (selalu 0).
   static Future<int> getTodayExpenseCount() async {
-    final todayList = await getTodayTransactions();
-    return todayList.where((t) => t.isOutgoing).length;
+    return 0;
   }
 
   // ── UPDATE ───────────────────────────────────────────────
@@ -263,14 +257,21 @@ class DatabaseService {
     }
   }
 
-  /// Preset awal bawaan tim (Marsha, Wili, Fauzan)
+  /// Preset awal bawaan tim (Gastonyk, Marsha, Wili, Fauzan)
   static List<WebhookPreset> _defaultPresets() {
     return [
+      WebhookPreset(
+        id: 'preset_gastonyk',
+        name: 'Gastonyk Official Webhook',
+        url: 'http://127.0.0.1:8000/api/webhook/dompetku',
+        payloadFormat: 'json_string',
+        isDefault: true,
+      ),
       WebhookPreset(
         id: 'preset_marsha',
         name: 'Marsha (Vercel Cloud 24/7)',
         url: defaultWebhookUrl,
-        isDefault: true,
+        isDefault: false,
       ),
       WebhookPreset(
         id: 'preset_wili',

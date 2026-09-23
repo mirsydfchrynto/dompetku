@@ -51,9 +51,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<TransactionModel> _transactions = []; // Semua transaksi
   double _todayIncome = 0; // Total nominal masuk hari ini
-  double _todayExpense = 0; // Total nominal keluar hari ini
   int _todayIncomeCount = 0; // Jumlah transaksi masuk hari ini
-  int _todayExpenseCount = 0; // Jumlah transaksi keluar hari ini
   bool _isLoading = true; // Sedang memuat data?
   String _selectedFilter = 'Semua'; // Filter aktif
   bool _isDemoLoading = false; // Sedang inject demo?
@@ -65,7 +63,6 @@ class _HomeScreenState extends State<HomeScreen> {
   static const List<String> _filters = [
     'Semua',
     'Uang Masuk',
-    'Uang Keluar',
     'GoPay',
     'DANA',
     'OVO',
@@ -101,13 +98,8 @@ class _HomeScreenState extends State<HomeScreen> {
           if (transaction.dateTime.day == now.day &&
               transaction.dateTime.month == now.month &&
               transaction.dateTime.year == now.year) {
-            if (transaction.isIncoming) {
-              _todayIncome += transaction.amount;
-              _todayIncomeCount++;
-            } else {
-              _todayExpense += transaction.amount;
-              _todayExpenseCount++;
-            }
+            _todayIncome += transaction.amount;
+            _todayIncomeCount++;
           }
         });
 
@@ -115,10 +107,8 @@ class _HomeScreenState extends State<HomeScreen> {
           SnackBar(
             content: Row(
               children: [
-                Icon(
-                  transaction.isIncoming
-                      ? Icons.check_circle_rounded
-                      : Icons.arrow_outward_rounded,
+                const Icon(
+                  Icons.check_circle_rounded,
                   color: Colors.white,
                   size: 20,
                 ),
@@ -131,9 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
             ),
-            backgroundColor: transaction.isIncoming
-                ? const Color(0xFF00796B)
-                : Colors.deepOrange.shade700,
+            backgroundColor: const Color(0xFF00796B),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -218,9 +206,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final transactions = await DatabaseService.getAllTransactions();
     final todayIncome = await DatabaseService.getTodayIncome();
-    final todayExpense = await DatabaseService.getTodayExpense();
     final todayIncomeCount = await DatabaseService.getTodayIncomeCount();
-    final todayExpenseCount = await DatabaseService.getTodayExpenseCount();
     final webhookUrl = await DatabaseService.getWebhookUrl();
     final isWebhookEnabled = await DatabaseService.isAutoForwardEnabled();
 
@@ -228,9 +214,7 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _transactions = transactions;
         _todayIncome = todayIncome;
-        _todayExpense = todayExpense;
         _todayIncomeCount = todayIncomeCount;
-        _todayExpenseCount = todayExpenseCount;
         _webhookUrl = webhookUrl;
         _isWebhookEnabled = isWebhookEnabled;
         _isLoading = false;
@@ -257,13 +241,8 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         setState(() {
           _transactions.insert(0, initialTx);
-          if (initialTx.isIncoming) {
-            _todayIncome += initialTx.amount;
-            _todayIncomeCount++;
-          } else {
-            _todayExpense += initialTx.amount;
-            _todayExpenseCount++;
-          }
+          _todayIncome += initialTx.amount;
+          _todayIncomeCount++;
           _isDemoLoading = false;
         });
 
@@ -272,9 +251,7 @@ class _HomeScreenState extends State<HomeScreen> {
             content: Text(
               'Demo: ${initialTx.appSource} ${initialTx.displayAmount}',
             ),
-            backgroundColor: initialTx.isIncoming
-                ? const Color(0xFF00796B)
-                : Colors.deepOrange.shade700,
+            backgroundColor: const Color(0xFF00796B),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -353,9 +330,6 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_selectedFilter == 'Semua') return _transactions;
     if (_selectedFilter == 'Uang Masuk') {
       return _transactions.where((t) => t.isIncoming).toList();
-    }
-    if (_selectedFilter == 'Uang Keluar') {
-      return _transactions.where((t) => t.isOutgoing).toList();
     }
     return _transactions
         .where((t) => t.appSource == _selectedFilter)
@@ -504,9 +478,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   SliverToBoxAdapter(
                     child: SummaryBanner(
                       totalIncome: _todayIncome,
-                      totalExpense: _todayExpense,
                       countIncome: _todayIncomeCount,
-                      countExpense: _todayExpenseCount,
+                      isLoading: _isLoading,
                     ),
                   ),
 
@@ -714,7 +687,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         // Tooltip: muncul saat user long-press tombol
-        tooltip: 'Simulasi transaksi uang masuk / keluar',
+        tooltip: 'Simulasi notifikasi uang masuk (QRIS / Transfer)',
       ),
     );
   }

@@ -110,35 +110,24 @@ void main() {
         expect(result.type, equals('dana_in'));
       });
 
-      test('parse notifikasi transfer keluar DANA', () {
+      test('ignore notifikasi transfer keluar DANA (ditolak, bukan uang masuk)', () {
         final result = QrisParser.parse(
           title: 'DANA',
           body: 'Kamu berhasil transfer uang ke Budi sebesar Rp 50.000',
           package: 'id.dana',
         );
 
-        expect(result, isNotNull);
-        expect(result!.amount, equals(50000.0));
-        expect(result.appSource, equals('DANA'));
-        expect(result.type, equals('dana_out'));
-        expect(result.isIncoming, isFalse);
-        expect(result.isOutgoing, isTrue);
-        expect(result.payerName, equals('Budi'));
+        expect(result, isNull);
       });
 
-      test('parse notifikasi tarik tunai DANA di Alfamart', () {
+      test('ignore notifikasi tarik tunai DANA di Alfamart (ditolak, bukan uang masuk)', () {
         final result = QrisParser.parse(
           title: 'DANA',
           body: 'Kamu berhasil menarik uang sebesar Rp 50.000 di Alfamart',
           package: 'id.dana',
         );
 
-        expect(result, isNotNull);
-        expect(result!.amount, equals(50000.0));
-        expect(result.appSource, equals('DANA'));
-        expect(result.type, equals('dana_out'));
-        expect(result.isIncoming, isFalse);
-        expect(result.payerName, contains('Tarik Tunai'));
+        expect(result, isNull);
       });
     });
 
@@ -228,19 +217,14 @@ void main() {
         expect(result.payerName, contains('BUDI SANTOSO'));
       });
 
-      test('parse transfer keluar ShopeePay', () {
+      test('ignore transfer keluar ShopeePay (ditolak, bukan uang masuk)', () {
         final result = QrisParser.parse(
           title: 'ShopeePay',
           body: 'Kamu berhasil transfer saldo sebesar Rp 25.000 ke Budi',
           package: 'com.shopeepay.id',
         );
 
-        expect(result, isNotNull);
-        expect(result!.amount, equals(25000.0));
-        expect(result.appSource, equals('ShopeePay'));
-        expect(result.type, equals('shopeepay_out'));
-        expect(result.isIncoming, isFalse);
-        expect(result.payerName, equals('Budi'));
+        expect(result, isNull);
       });
     });
 
@@ -301,19 +285,14 @@ void main() {
         expect(result.payerName, equals('AHMAD'));
       });
 
-      test('parse transfer keluar SeaBank', () {
+      test('ignore transfer keluar SeaBank (ditolak, bukan uang masuk)', () {
         final result = QrisParser.parse(
           title: 'SeaBank',
           body: 'Kamu berhasil transfer ke rekening BCA sebesar Rp 100.000',
           package: 'com.seabank.seabank',
         );
 
-        expect(result, isNotNull);
-        expect(result!.amount, equals(100000.0));
-        expect(result.appSource, equals('SeaBank'));
-        expect(result.type, equals('seabank_out'));
-        expect(result.isIncoming, isFalse);
-        expect(result.payerName, equals('Rekening BCA'));
+        expect(result, isNull);
       });
     });
 
@@ -361,19 +340,14 @@ void main() {
         expect(result.payerName, contains('Siti'));
       });
 
-      test('parse transfer keluar Bank Jago', () {
+      test('ignore transfer keluar Bank Jago (ditolak, bukan uang masuk)', () {
         final result = QrisParser.parse(
           title: 'Bank Jago',
           body: 'Transfer ke BUDI sebesar Rp 50.000 berhasil',
           package: 'com.jago.digitalBanking',
         );
 
-        expect(result, isNotNull);
-        expect(result!.amount, equals(50000.0));
-        expect(result.appSource, equals('Jago'));
-        expect(result.type, equals('jago_out'));
-        expect(result.isIncoming, isFalse);
-        expect(result.payerName, equals('BUDI'));
+        expect(result, isNull);
       });
     });
 
@@ -434,19 +408,14 @@ void main() {
         expect(result.payerName, equals('SITI RAHMAWATI'));
       });
 
-      test('parse m-Transfer transfer keluar BCA', () {
+      test('ignore m-Transfer transfer keluar BCA (ditolak, bukan uang masuk)', () {
         final result = QrisParser.parse(
           title: 'm-BCA',
           body: 'm-Transfer: Berhasil transfer ke Budi sebesar Rp 50.000',
           package: 'com.bca',
         );
 
-        expect(result, isNotNull);
-        expect(result!.amount, equals(50000.0));
-        expect(result.appSource, equals('BCA Mobile'));
-        expect(result.type, equals('bca_out'));
-        expect(result.isIncoming, isFalse);
-        expect(result.payerName, equals('Budi'));
+        expect(result, isNull);
       });
     });
 
@@ -480,19 +449,14 @@ void main() {
         expect(result.payerName, contains('Rudi'));
       });
 
-      test('parse pembayaran tagihan di Livin', () {
+      test('ignore pembayaran tagihan di Livin (ditolak, bukan uang masuk)', () {
         final result = QrisParser.parse(
           title: 'Livin',
           body: 'Pembayaran tagihan listrik Rp 150.000 berhasil',
           package: 'id.co.mandiri.livin',
         );
 
-        expect(result, isNotNull);
-        expect(result!.amount, equals(150000.0));
-        expect(result.appSource, equals('Livin Mandiri'));
-        expect(result.type, equals('mandiri_out'));
-        expect(result.isIncoming, isFalse);
-        expect(result.payerName, contains('Tagihan'));
+        expect(result, isNull);
       });
     });
 
@@ -525,19 +489,14 @@ void main() {
         expect(result.type, equals('bri_in'));
       });
 
-      test('parse tarik tunai BRImo', () {
+      test('ignore tarik tunai BRImo (ditolak, bukan uang masuk)', () {
         final result = QrisParser.parse(
           title: 'BRImo',
           body: 'Tarik tunai Rp 100.000 berhasil di ATM BRI',
           package: 'id.co.bri.brimo',
         );
 
-        expect(result, isNotNull);
-        expect(result!.amount, equals(100000.0));
-        expect(result.appSource, equals('BRImo'));
-        expect(result.type, equals('bri_out'));
-        expect(result.isIncoming, isFalse);
-        expect(result.payerName, contains('Tarik Tunai'));
+        expect(result, isNull);
       });
     });
 
@@ -747,6 +706,39 @@ void main() {
         );
 
         expect(result, isNull);
+      });
+    });
+
+    // ── 15. KOLABORASI GASTONYK ──────────────────────────────
+    group('Gastonyk Official Collaboration', () {
+      test('parse notifikasi QRIS pembayaran pesanan Gastonyk', () {
+        final result = QrisParser.parse(
+          title: 'GoPay',
+          body: 'Pembayaran QRIS Rp175.000 berhasil diterima untuk Gastonyk Official Store',
+          package: 'com.gojek.gopay',
+        );
+
+        expect(result, isNotNull);
+        expect(result!.amount, equals(175000.0));
+        expect(result.appSource, equals('GoPay'));
+        expect(result.type, equals('gopay_in'));
+        expect(result.isIncoming, isTrue);
+        expect(result.isOutgoing, isFalse);
+      });
+
+      test('parse notifikasi transfer masuk bank pesanan Gastonyk', () {
+        final result = QrisParser.parse(
+          title: 'm-BCA',
+          body: 'm-Transfer: Rp 350.000,00 dari HENDRA SETIAWAN telah masuk ke rek 1234567890',
+          package: 'com.bca',
+        );
+
+        expect(result, isNotNull);
+        expect(result!.amount, equals(350000.0));
+        expect(result.appSource, equals('BCA Mobile'));
+        expect(result.type, equals('bca_in'));
+        expect(result.payerName, equals('HENDRA SETIAWAN'));
+        expect(result.isIncoming, isTrue);
       });
     });
   });

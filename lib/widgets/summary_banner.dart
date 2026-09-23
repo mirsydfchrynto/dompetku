@@ -1,12 +1,13 @@
 // ============================================================
 // FILE: summary_banner.dart
 //
-// TUJUAN: Banner ringkasan arus kas (Uang Masuk & Uang Keluar) hari ini
+// TUJUAN: Banner ringkasan total pemasukan (Uang Masuk / QRIS) hari ini.
 //
 // FITUR:
-//   - Tampilan modern profesional & informatif
-//   - Menampilkan Saldo Bersih, Total Uang Masuk, dan Total Uang Keluar
-//   - 100% responsif & FittedBox anti-overflow untuk semua ukuran layar
+//   - Menampilkan Total Pemasukan Hari Ini secara tegas dan jelas
+//   - Menampilkan Jumlah Transaksi Masuk Terverifikasi
+//   - 100% Bebas dari Pengeluaran (fokus murni pada penerimaan kas / QRIS)
+//   - Responsif & FittedBox anti-overflow untuk semua ukuran layar
 // ============================================================
 
 import 'package:flutter/material.dart';
@@ -15,22 +16,15 @@ import '../utils/formatter.dart';
 
 class SummaryBanner extends StatelessWidget {
   final double totalIncome;
-  final double totalExpense;
   final int countIncome;
-  final int countExpense;
   final bool isLoading;
 
   const SummaryBanner({
     super.key,
     required this.totalIncome,
-    required this.totalExpense,
     required this.countIncome,
-    required this.countExpense,
     this.isLoading = false,
   });
-
-  double get netTotal => totalIncome - totalExpense;
-  int get totalCount => countIncome + countExpense;
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +49,7 @@ class SummaryBanner extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── BARIS ATAS: Header & Badge Total Transaksi ──
+          // ── BARIS ATAS: Header & Badge Transaksi Masuk ──
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -68,7 +62,7 @@ class SummaryBanner extends StatelessWidget {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    'Arus Kas Hari Ini',
+                    'Pemasukan Hari Ini',
                     style: GoogleFonts.inter(
                       color: Colors.white.withValues(alpha: 0.95),
                       fontSize: 13,
@@ -78,29 +72,44 @@ class SummaryBanner extends StatelessWidget {
                 ],
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '$totalCount Transaksi',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.25),
+                    width: 0.8,
                   ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.arrow_downward_rounded,
+                      color: Colors.greenAccent,
+                      size: 11,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$countIncome Transaksi Masuk',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
 
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
 
-          // ── BARIS TENGAH: Saldo Bersih (Net Total) ─────
+          // ── BARIS TENGAH: Total Nominal Masuk ─────
           isLoading
               ? const SizedBox(
-                  height: 34,
+                  height: 36,
                   child: Center(
                     child: CircularProgressIndicator(
                       color: Colors.white,
@@ -119,23 +128,21 @@ class SummaryBanner extends StatelessWidget {
                       textBaseline: TextBaseline.alphabetic,
                       children: [
                         Text(
-                          netTotal >= 0
-                              ? '+${Formatter.currency(netTotal)}'
-                              : '-${Formatter.currency(netTotal.abs())}',
+                          '+${Formatter.currency(totalIncome)}',
                           style: GoogleFonts.inter(
                             color: Colors.white,
-                            fontSize: 26,
+                            fontSize: 28,
                             fontWeight: FontWeight.bold,
                             letterSpacing: -0.5,
                           ),
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          '(Saldo Bersih)',
+                          '(QRIS & Transfer Masuk)',
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.75),
+                            color: Colors.white.withValues(alpha: 0.8),
                             fontSize: 11.5,
-                            fontWeight: FontWeight.normal,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
@@ -145,131 +152,55 @@ class SummaryBanner extends StatelessWidget {
 
           const SizedBox(height: 14),
 
-          // ── BARIS BAWAH: Dua Kartu Uang Masuk vs Uang Keluar ──
-          Row(
-            children: [
-              // Kartu Masuk
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          // ── BARIS BAWAH: Integrasi Webhook & Status Realtime ──
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.18),
+                width: 0.8,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      width: 0.8,
-                    ),
+                    color: Colors.greenAccent.shade400.withValues(alpha: 0.25),
+                    shape: BoxShape.circle,
                   ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.greenAccent.shade400.withValues(alpha: 0.25),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.south_west_rounded,
-                          color: Colors.greenAccent,
-                          size: 13,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Masuk ($countIncome)',
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                color: Colors.white.withValues(alpha: 0.85),
-                              ),
-                            ),
-                            const SizedBox(height: 1),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                '+${Formatter.currency(totalIncome)}',
-                                style: const TextStyle(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                  child: const Icon(
+                    Icons.sensors_rounded,
+                    color: Colors.greenAccent,
+                    size: 13,
                   ),
                 ),
-              ),
-
-              const SizedBox(width: 10),
-
-              // Kartu Keluar
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      width: 0.8,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Listener Otomatis Siap • Sinkron ke Gastonyk Official',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white.withValues(alpha: 0.9),
                     ),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.amberAccent.shade400.withValues(alpha: 0.25),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.north_east_rounded,
-                          color: Colors.amberAccent,
-                          size: 13,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Keluar ($countExpense)',
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                color: Colors.white.withValues(alpha: 0.85),
-                              ),
-                            ),
-                            const SizedBox(height: 1),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                '-${Formatter.currency(totalExpense)}',
-                                style: const TextStyle(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 6),
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: const BoxDecoration(
+                    color: Colors.greenAccent,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

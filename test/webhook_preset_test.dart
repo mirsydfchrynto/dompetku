@@ -20,6 +20,22 @@ void main() {
       expect(preset.lastTestedAt, isNull);
     });
 
+    test('creates Gastonyk Official Webhook preset correctly', () {
+      final preset = WebhookPreset(
+        id: 'preset_gastonyk',
+        name: 'Gastonyk Official Webhook',
+        url: 'http://127.0.0.1:8000/api/webhook/dompetku',
+        payloadFormat: 'json_string',
+        isDefault: true,
+      );
+
+      expect(preset.id, equals('preset_gastonyk'));
+      expect(preset.name, equals('Gastonyk Official Webhook'));
+      expect(preset.url, equals('http://127.0.0.1:8000/api/webhook/dompetku'));
+      expect(preset.payloadFormat, equals('json_string'));
+      expect(preset.isDefault, isTrue);
+    });
+
     test('serializes to and deserializes from JSON correctly', () {
       final now = DateTime.now();
       final original = WebhookPreset(
