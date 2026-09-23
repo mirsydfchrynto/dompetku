@@ -21,9 +21,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/transaction_model.dart';
 import '../services/database_service.dart';
 import '../services/notification_listener_service.dart';
-import '../services/webhook_service.dart';
 import '../services/csv_exporter.dart';
-import '../utils/demo_data.dart';
 import '../utils/formatter.dart';
 import '../widgets/transaction_card.dart';
 import '../widgets/summary_banner.dart';
@@ -54,7 +52,6 @@ class _HomeScreenState extends State<HomeScreen> {
   int _todayIncomeCount = 0; // Jumlah transaksi masuk hari ini
   bool _isLoading = true; // Sedang memuat data?
   String _selectedFilter = 'Semua'; // Filter aktif
-  bool _isDemoLoading = false; // Sedang inject demo?
   String _webhookUrl = ''; // URL webhook backend
   bool _isWebhookEnabled = true; // Status aktif webhook
   bool _isListenerActive = false; // Status listener Android service
@@ -222,58 +219,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // ── DEMO MODE ────────────────────────────────────────────
-
-  /// Inject satu transaksi demo.
-  Future<void> _injectDemo() async {
-    setState(() => _isDemoLoading = true);
-
-    final transaction = await DemoData.injectRandom();
-
-    if (transaction != null) {
-      final isWebhookAuto = await DatabaseService.isAutoForwardEnabled();
-      final initialTx = isWebhookAuto
-          ? transaction.copyWith(webhookStatus: 'pending')
-          : transaction;
-
-      await DatabaseService.saveTransaction(initialTx);
-
-      if (mounted) {
-        setState(() {
-          _transactions.insert(0, initialTx);
-          _todayIncome += initialTx.amount;
-          _todayIncomeCount++;
-          _isDemoLoading = false;
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Demo: ${initialTx.appSource} ${initialTx.displayAmount}',
-            ),
-            backgroundColor: const Color(0xFF00796B),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-
-      // Jika webhook auto aktif, kirim demo ini ke backend server juga!
-      if (isWebhookAuto) {
-        WebhookService.sendTransaction(initialTx).then((_) async {
-          final updated = await DatabaseService.getTransaction(initialTx.id);
-          if (updated != null && mounted) {
-            setState(() {
-              final idx = _transactions.indexWhere((t) => t.id == updated.id);
-              if (idx != -1) _transactions[idx] = updated;
-            });
-          }
-        });
-      }
-    } else {
-      if (mounted) setState(() => _isDemoLoading = false);
-    }
-  }
-
   // ── EXPORT CSV ───────────────────────────────────────────
 
   Future<void> _exportCsv() async {
@@ -414,7 +359,6 @@ class _HomeScreenState extends State<HomeScreen> {
               }
               if (value == 'restart_listener') _restartListener();
               if (value == 'reset') _confirmReset();
-              if (value == 'demo5') _injectDemo5();
             },
             itemBuilder: (ctx) => [
               const PopupMenuItem(
@@ -434,16 +378,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     Icon(Icons.refresh_rounded, size: 20, color: Color(0xFF00796B)),
                     SizedBox(width: 8),
                     Text('Restart Listener'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'demo5',
-                child: Row(
-                  children: [
-                    Icon(Icons.playlist_add, size: 20),
-                    SizedBox(width: 8),
-                    Text('Tambah 5 Demo'),
                   ],
                 ),
               ),
@@ -526,14 +460,14 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          // Kartu Edukasi & Simulator
+                          // Kartu Edukasi & Panduan
                           Expanded(
                             child: _QuickActionCard(
                               icon: Icons.school_rounded,
                               iconColor: const Color(0xFF00796B),
                               title: 'Pusat Edukasi',
-                              subtitle: 'Alur & Simulator',
-                              badgeText: 'DEMO',
+                              subtitle: 'Panduan & Alur QRIS',
+                              badgeText: 'INFO',
                               badgeColor: const Color(0xFF00796B),
                               onTap: () async {
                                 await Navigator.push(
@@ -596,7 +530,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   _filteredTransactions.isEmpty
                       ? SliverFillRemaining(
                           hasScrollBody: false,
-                          child: EmptyState(onDemoPressed: _injectDemo),
+                          child: const EmptyState(),
                         )
                       : SliverList(
                           delegate: SliverChildBuilderDelegate(
@@ -656,48 +590,16 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
 
-                  // Extra padding di bawah agar FAB tidak nutup
+                  // Extra padding di bawah
                   const SliverToBoxAdapter(
-                    child: SizedBox(height: 80),
+                    child: SizedBox(height: 32),
                   ),
                 ],
               ),
       ),
 
-      // ── FLOATING ACTION BUTTON (Demo) ────────────────────
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _isDemoLoading ? null : _injectDemo,
-        backgroundColor: const Color(0xFF00796B),
-        foregroundColor: Colors.white,
-        icon: _isDemoLoading
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2,
-                ),
-              )
-            : const Icon(Icons.add_rounded),
-        label: Text(
-          _isDemoLoading ? 'Memproses...' : 'Simulasi Demo',
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.2,
-          ),
-        ),
-        // Tooltip: muncul saat user long-press tombol
-        tooltip: 'Simulasi notifikasi uang masuk (QRIS / Transfer)',
-      ),
+      floatingActionButton: null,
     );
-  }
-
-  // Inject 5 transaksi sekaligus
-  Future<void> _injectDemo5() async {
-    for (int i = 0; i < 5; i++) {
-      await _injectDemo();
-      await Future.delayed(const Duration(milliseconds: 300));
-    }
   }
 }
 

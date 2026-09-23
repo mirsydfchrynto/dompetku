@@ -9,9 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class EmptyState extends StatelessWidget {
-  final VoidCallback? onDemoPressed;
-
-  const EmptyState({super.key, this.onDemoPressed});
+  const EmptyState({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -64,24 +62,6 @@ class EmptyState extends StatelessWidget {
               ),
 
               const SizedBox(height: 16),
-
-              // Tombol Demo untuk coba tanpa transaksi nyata
-              OutlinedButton.icon(
-                onPressed: onDemoPressed,
-                icon: const Icon(Icons.play_circle_outline, size: 20),
-                label: const Text('Coba Demo Sekarang'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF00796B),
-                  side: const BorderSide(color: Color(0xFF00796B), width: 1.5),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                ),
-              ),
-
-              const SizedBox(height: 12),
 
               // Panduan aktifkan notifikasi
               Container(
