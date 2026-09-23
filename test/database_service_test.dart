@@ -206,4 +206,103 @@ void main() {
       expect(remainingFailed, equals(0));
     });
   });
+
+  group('Webhook Security & Automatic Failover Tests', () {
+    test('stores and retrieves webhookSecret and fallbackWebhookUrl correctly', () async {
+      expect(await DatabaseService.getWebhookSecret(), isEmpty);
+      expect(await DatabaseService.getFallbackWebhookUrl(), isEmpty);
+
+      await DatabaseService.setWebhookSecret('super_secret_hmac_key');
+      await DatabaseService.setFallbackWebhookUrl('http://192.168.100.61:8000/api/webhook/dompetku');
+
+      expect(await DatabaseService.getWebhookSecret(), equals('super_secret_hmac_key'));
+      expect(
+        await DatabaseService.getFallbackWebhookUrl(),
+        equals('http://192.168.100.61:8000/api/webhook/dompetku'),
+      );
+    });
+
+    test('sendTransaction attaches cryptographic HMAC headers when webhookSecret is configured', () async {
+      await DatabaseService.setWebhookUrl('http://127.0.0.1:8000/api/webhook/dompetku');
+      await DatabaseService.setAutoForwardEnabled(true);
+      await DatabaseService.setWebhookSecret('gas_secret_production');
+
+      final tx = TransactionModel(
+        id: 'tx_sec_1',
+        amount: 250000,
+        type: 'bca_in',
+        appSource: 'BCA Mobile',
+        payerName: 'Hendra Setiawan',
+        dateTime: DateTime.now(),
+        rawMessage: 'BCA: Rp 250.000 dari Hendra Setiawan order: GAS-202609-0099',
+        appPackage: 'com.bca',
+      );
+      await DatabaseService.saveTransaction(tx);
+
+      final mockClient = MockClient((request) async {
+        expect(request.headers.containsKey('x-dompetku-timestamp'), isTrue);
+        expect(request.headers.containsKey('x-dompetku-signature'), isTrue);
+
+        final ts = int.parse(request.headers['x-dompetku-timestamp']!);
+        final sig = request.headers['x-dompetku-signature']!;
+        final expectedSig = WebhookService.generateHmacSignature('gas_secret_production', request.body, ts);
+        expect(sig, equals(expectedSig));
+
+        return http.Response('{"status":"verified_and_processed"}', 200);
+      });
+
+      final result = await WebhookService.sendTransaction(tx, client: mockClient);
+      expect(result.isSuccess, isTrue);
+      expect(result.statusCode, equals(200));
+
+      final updatedTx = await DatabaseService.getTransaction('tx_sec_1');
+      expect(updatedTx?.webhookStatus, equals('success'));
+    });
+
+    test('sendTransaction executes automatic failover to fallbackWebhookUrl when primary fails with SocketException', () async {
+      const primaryUrl = 'http://127.0.0.1:8000/api/webhook/dompetku';
+      const fallbackUrl = 'http://192.168.100.61:8000/api/webhook/dompetku';
+
+      await DatabaseService.setWebhookUrl(primaryUrl);
+      await DatabaseService.setFallbackWebhookUrl(fallbackUrl);
+      await DatabaseService.setAutoForwardEnabled(true);
+
+      final tx = TransactionModel(
+        id: 'tx_failover_1',
+        amount: 75000,
+        type: 'gopay_in',
+        appSource: 'GoPay',
+        payerName: 'Kevin Sanjaya',
+        dateTime: DateTime.now(),
+        rawMessage: 'GoPay: Pembayaran diterima Rp 75.000 dari Kevin Sanjaya',
+        appPackage: 'com.gojek.gopay',
+      );
+      await DatabaseService.saveTransaction(tx);
+
+      int primaryAttempts = 0;
+      int fallbackAttempts = 0;
+
+      final mockClient = MockClient((request) async {
+        if (request.url.toString() == primaryUrl) {
+          primaryAttempts++;
+          throw const SocketException('Connection refused to primary ADB USB');
+        } else if (request.url.toString() == fallbackUrl) {
+          fallbackAttempts++;
+          return http.Response('{"status":"failover_received"}', 200);
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      final result = await WebhookService.sendTransaction(tx, client: mockClient);
+
+      expect(primaryAttempts, equals(1));
+      expect(fallbackAttempts, equals(1));
+      expect(result.isSuccess, isTrue);
+      expect(result.statusCode, equals(200));
+
+      final updatedTx = await DatabaseService.getTransaction('tx_failover_1');
+      expect(updatedTx?.webhookStatus, equals('success'));
+      expect(updatedTx?.webhookHttpCode, equals(200));
+    });
+  });
 }

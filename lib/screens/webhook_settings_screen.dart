@@ -98,6 +98,7 @@ class _WebhookSettingsScreenState extends State<WebhookSettingsScreen> {
     final result = await WebhookService.testConnection(
       preset.url,
       authHeader: preset.authHeader?.isNotEmpty == true ? preset.authHeader : null,
+      secret: preset.webhookSecret?.isNotEmpty == true ? preset.webhookSecret : null,
     );
 
     // Update last test code on preset
@@ -459,6 +460,7 @@ class _WebhookSettingsScreenState extends State<WebhookSettingsScreen> {
     final nameCtrl = TextEditingController(text: existing?.name ?? '');
     final urlCtrl = TextEditingController(text: existing?.url ?? '');
     final authCtrl = TextEditingController(text: existing?.authHeader ?? '');
+    final secretCtrl = TextEditingController(text: existing?.webhookSecret ?? '');
     String format = existing?.payloadFormat ?? 'raw';
 
     await showDialog(
@@ -500,6 +502,15 @@ class _WebhookSettingsScreenState extends State<WebhookSettingsScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                TextField(
+                  controller: secretCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Webhook Secret / HMAC Key (Opsional)',
+                    hintText: 'Secret untuk tanda tangan HMAC-SHA256...',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     const Text('Format: ', style: TextStyle(fontSize: 12)),
@@ -535,16 +546,21 @@ class _WebhookSettingsScreenState extends State<WebhookSettingsScreen> {
                 final url = urlCtrl.text.trim();
                 if (url.isEmpty) return;
 
+                final secret = secretCtrl.text.trim();
                 final updated = WebhookPreset(
                   id: existing?.id ?? 'preset_${DateTime.now().millisecondsSinceEpoch}',
                   name: name.isNotEmpty ? name : 'Server Kustom',
                   url: url,
                   authHeader: authCtrl.text.trim().isNotEmpty ? authCtrl.text.trim() : null,
+                  webhookSecret: secret.isNotEmpty ? secret : null,
                   payloadFormat: format,
                   isDefault: existing?.isDefault ?? false,
                 );
 
                 await DatabaseService.saveOrUpdatePreset(updated);
+                if (existing?.url == _activeUrl) {
+                  await DatabaseService.setWebhookSecret(secret);
+                }
                 if (ctx.mounted) {
                   Navigator.pop(ctx);
                 }

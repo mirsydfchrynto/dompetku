@@ -43,6 +43,7 @@ void main() {
         name: 'Server Wili',
         url: 'https://d091-103-3-222-52.ngrok-free.app/api/notification',
         authHeader: 'Bearer wili_secret_123',
+        webhookSecret: 'gastonyk_hmac_secret_key_456',
         payloadFormat: 'json_string',
         isDefault: true,
         lastHttpCode: 200,
@@ -56,6 +57,7 @@ void main() {
       expect(reconstructed.name, original.name);
       expect(reconstructed.url, original.url);
       expect(reconstructed.authHeader, original.authHeader);
+      expect(reconstructed.webhookSecret, 'gastonyk_hmac_secret_key_456');
       expect(reconstructed.payloadFormat, original.payloadFormat);
       expect(reconstructed.isDefault, original.isDefault);
       expect(reconstructed.lastHttpCode, 200);
@@ -72,12 +74,14 @@ void main() {
 
       final updated = preset.copyWith(
         name: 'Server Baru',
+        webhookSecret: 'new_secret_key',
         lastHttpCode: 201,
       );
 
       expect(updated.id, 'preset_1');
       expect(updated.name, 'Server Baru');
       expect(updated.url, 'https://old.com/api');
+      expect(updated.webhookSecret, 'new_secret_key');
       expect(updated.lastHttpCode, 201);
     });
   });

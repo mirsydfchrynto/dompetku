@@ -18,6 +18,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import '../models/transaction_model.dart';
 import 'database_service.dart';
@@ -61,8 +62,28 @@ class RetryQueueResult {
 class WebhookService {
   static const Duration _timeout = Duration(seconds: 10);
 
+  /// Menghasilkan tanda tangan digital HMAC-SHA256 sesuai standar WebhookVerifierService.
+  static String generateHmacSignature(
+    String secret,
+    String payload,
+    int timestamp,
+  ) {
+    final message = '$timestamp.$payload';
+    final key = utf8.encode(secret);
+    final bytes = utf8.encode(message);
+    final hmacSha256 = Hmac(sha256, key);
+    final digest = hmacSha256.convert(bytes);
+    return digest.toString();
+  }
+
   /// Helper untuk membangun header HTTP request.
-  static Map<String, String> _buildHeaders(String? authHeader, {String? url}) {
+  static Map<String, String> _buildHeaders(
+    String? authHeader, {
+    String? url,
+    String? secret,
+    String? body,
+    int? timestamp,
+  }) {
     final headers = <String, String>{
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -71,6 +92,16 @@ class WebhookService {
     // Otomatis tambahkan bypass-tunnel-reminder untuk LocalTunnel (loca.lt)
     if (url != null && url.contains('loca.lt')) {
       headers['bypass-tunnel-reminder'] = 'true';
+    }
+
+    // HMAC-SHA256 Cryptographic Signature Headers (Anti-tamper & Anti-replay)
+    if (secret != null &&
+        secret.trim().isNotEmpty &&
+        body != null &&
+        timestamp != null) {
+      final sig = generateHmacSignature(secret.trim(), body, timestamp);
+      headers['X-Dompetku-Timestamp'] = timestamp.toString();
+      headers['X-Dompetku-Signature'] = sig;
     }
 
     if (authHeader != null && authHeader.trim().isNotEmpty) {
@@ -126,9 +157,14 @@ class WebhookService {
     bool forceSend = false,
   }) async {
     final httpClient = client ?? http.Client();
+    String webhookUrl = '';
+    String authHeader = '';
+    String webhookSecret = '';
+    String body = '';
+    int timestamp = 0;
 
     try {
-      final webhookUrl = await DatabaseService.getWebhookUrl();
+      webhookUrl = await DatabaseService.getWebhookUrl();
       final isEnabled = await DatabaseService.isAutoForwardEnabled();
 
       // Jika URL belum diset dan tidak dipaksa
@@ -156,7 +192,8 @@ class WebhookService {
         );
       }
 
-      final authHeader = await DatabaseService.getAuthHeader();
+      authHeader = await DatabaseService.getAuthHeader();
+      webhookSecret = await DatabaseService.getWebhookSecret();
       final payloadFormat = await DatabaseService.getPayloadFormat();
       final messageContent = formatMessage(transaction, payloadFormat);
 
@@ -168,9 +205,16 @@ class WebhookService {
         if (transaction.orderCode != null) 'order_code': transaction.orderCode,
       };
 
-      final body = jsonEncode(payloadMap);
+      body = jsonEncode(payloadMap);
+      timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
-      final headers = _buildHeaders(authHeader, url: webhookUrl);
+      final headers = _buildHeaders(
+        authHeader,
+        url: webhookUrl,
+        secret: webhookSecret,
+        body: body,
+        timestamp: timestamp,
+      );
       final uri = Uri.parse(webhookUrl);
 
       final response = await httpClient
@@ -210,6 +254,48 @@ class WebhookService {
         errorMessage: 'Request timeout (10 detik)',
       );
     } on SocketException catch (e) {
+      // ── AUTOMATIC FAILOVER ─────────────────────────────────
+      // Jika endpoint utama (misal: ADB USB 127.0.0.1) gagal konek,
+      // coba fallback endpoint (misal: Wi-Fi LAN / IP server) jika ada
+      final fallbackUrl = await DatabaseService.getFallbackWebhookUrl();
+      if (fallbackUrl.isNotEmpty && fallbackUrl != webhookUrl) {
+        try {
+          final fallbackUri = Uri.parse(fallbackUrl);
+          final fallbackHeaders = _buildHeaders(
+            authHeader,
+            url: fallbackUrl,
+            secret: webhookSecret,
+            body: body,
+            timestamp: timestamp,
+          );
+          final fallbackResponse = await httpClient
+              .post(
+                fallbackUri,
+                headers: fallbackHeaders,
+                body: body,
+              )
+              .timeout(_timeout);
+
+          final isFallbackSuccess = fallbackResponse.statusCode >= 200 &&
+              fallbackResponse.statusCode < 300;
+          if (isFallbackSuccess) {
+            final updated = transaction.copyWith(
+              webhookStatus: 'success',
+              webhookHttpCode: fallbackResponse.statusCode,
+              webhookSentAt: DateTime.now(),
+              webhookError: null,
+            );
+            await DatabaseService.updateTransaction(updated);
+            return WebhookResult(
+              isSuccess: true,
+              statusCode: fallbackResponse.statusCode,
+            );
+          }
+        } catch (_) {
+          // Fallback juga gagal, lanjut simpan status failed ke offline buffer
+        }
+      }
+
       final updated = transaction.copyWith(
         webhookStatus: 'failed',
         webhookSentAt: DateTime.now(),
@@ -253,6 +339,7 @@ class WebhookService {
   static Future<WebhookResult> testConnection(
     String url, {
     String? authHeader,
+    String? secret,
     http.Client? client,
   }) async {
     final httpClient = client ?? http.Client();
@@ -274,12 +361,20 @@ class WebhookService {
         );
       }
 
-      final headers = _buildHeaders(authHeader, url: cleanUrl);
       final body = jsonEncode({
         'action': 'ping',
         'event': 'ping',
         'message': 'Test koneksi webhook dari DompetKu Xiaomi (ping)',
       });
+      final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+      final headers = _buildHeaders(
+        authHeader,
+        url: cleanUrl,
+        secret: secret,
+        body: body,
+        timestamp: timestamp,
+      );
 
       final response = await httpClient
           .post(

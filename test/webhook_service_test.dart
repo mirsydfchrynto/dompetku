@@ -198,4 +198,59 @@ void main() {
       expect(result.isSuccess, isTrue);
     });
   });
+
+  group('HMAC-SHA256 Cryptographic Signature & Gastonyk Compatibility', () {
+    test('generateHmacSignature produces exact SHA256 digest matching Gastonyk WebhookVerifierService', () {
+      const secret = 'secret123';
+      const payload = '{"message":"test"}';
+      const timestamp = 1700000000;
+
+      final sig = WebhookService.generateHmacSignature(secret, payload, timestamp);
+
+      // Sesuai dengan hash_hmac('sha256', '1700000000.{"message":"test"}', 'secret123') di Gastonyk
+      expect(sig, equals('7401b5f5d15d540b992663eaf512552c85e7e09c8e96f79d61961e7c904bf9ba'));
+    });
+
+    test('testConnection attaches X-Dompetku-Signature and X-Dompetku-Timestamp when secret is provided', () async {
+      const testSecret = 'gastonyk_production_secret';
+      final mockClient = MockClient((request) async {
+        expect(request.headers.containsKey('x-dompetku-timestamp'), isTrue);
+        expect(request.headers.containsKey('x-dompetku-signature'), isTrue);
+
+        final ts = int.parse(request.headers['x-dompetku-timestamp']!);
+        final sig = request.headers['x-dompetku-signature']!;
+
+        final expectedSig = WebhookService.generateHmacSignature(testSecret, request.body, ts);
+        expect(sig, equals(expectedSig));
+
+        return http.Response('{"status":"verified"}', 200);
+      });
+
+      final result = await WebhookService.testConnection(
+        'http://127.0.0.1:8000/api/webhook/dompetku',
+        secret: testSecret,
+        client: mockClient,
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(result.statusCode, equals(200));
+    });
+
+    test('testConnection does not attach HMAC headers when secret is null or empty', () async {
+      final mockClient = MockClient((request) async {
+        expect(request.headers.containsKey('x-dompetku-timestamp'), isFalse);
+        expect(request.headers.containsKey('x-dompetku-signature'), isFalse);
+        return http.Response('{"status":"ok"}', 200);
+      });
+
+      final result = await WebhookService.testConnection(
+        'http://127.0.0.1:8000/api/webhook/dompetku',
+        secret: null,
+        client: mockClient,
+      );
+
+      expect(result.isSuccess, isTrue);
+    });
+  });
 }
+

@@ -215,6 +215,7 @@ class DatabaseService {
   static const String _settingsBoxName = 'settings';
 
   static Future<Box> get _settingsBox async {
+    await ensureInitialized();
     return await Hive.openBox(_settingsBoxName);
   }
 
@@ -243,6 +244,30 @@ class DatabaseService {
   static Future<void> setWebhookUrl(String url) async {
     final box = await _settingsBox;
     await box.put('webhook_url', url.trim());
+  }
+
+  /// Ambil Webhook Secret untuk HMAC-SHA256 signature signing (opsional, untuk Gastonyk produksi).
+  static Future<String> getWebhookSecret() async {
+    final box = await _settingsBox;
+    return box.get('webhook_secret', defaultValue: '') as String;
+  }
+
+  /// Simpan Webhook Secret.
+  static Future<void> setWebhookSecret(String secret) async {
+    final box = await _settingsBox;
+    await box.put('webhook_secret', secret.trim());
+  }
+
+  /// Ambil URL endpoint cadangan (failover) saat endpoint utama mengalami kendala jaringan.
+  static Future<String> getFallbackWebhookUrl() async {
+    final box = await _settingsBox;
+    return box.get('fallback_webhook_url', defaultValue: '') as String;
+  }
+
+  /// Simpan URL endpoint cadangan (failover).
+  static Future<void> setFallbackWebhookUrl(String url) async {
+    final box = await _settingsBox;
+    await box.put('fallback_webhook_url', url.trim());
   }
 
   /// Cek apakah pengiriman otomatis aktif.
@@ -297,6 +322,7 @@ class DatabaseService {
   static const String _presetsBoxName = 'webhook_presets';
 
   static Future<Box> get _presetsBox async {
+    await ensureInitialized();
     return await Hive.openBox(_presetsBoxName);
   }
 
@@ -406,6 +432,7 @@ class DatabaseService {
     if (target.authHeader != null) {
       await setAuthHeader(target.authHeader!);
     }
+    await setWebhookSecret(target.webhookSecret ?? '');
     await setPayloadFormat(target.payloadFormat);
   }
 }
