@@ -44,7 +44,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 // Konvensi nama: awali dengan _ (private) dan akhiri State
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   // ── STATE VARIABLES ──────────────────────────────────────
   // Variabel-variabel ini adalah "state" — data yang bisa berubah
   // dan menyebabkan UI di-rebuild
@@ -85,6 +85,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // Gunakan untuk: load data awal, setup listener, dll
 
     super.initState(); // Selalu panggil super.initState() dulu!
+    WidgetsBinding.instance.addObserver(this);
 
     // 1. Muat data dari database
     _loadData();
@@ -203,10 +204,37 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _retryTimer?.cancel();
     AppNotificationListenerService.onNewTransaction = null;
     AppNotificationListenerService.onTransactionUpdated = null;
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _onAppResumed();
+    }
+  }
+
+  Future<void> _onAppResumed() async {
+    // 1. Cek kesehatan listener service Android (self-healing watchdog)
+    final running = await AppNotificationListenerService.isServiceRunning();
+    if (!running) {
+      final started = await AppNotificationListenerService.startListening();
+      if (mounted) setState(() => _isListenerActive = started);
+    } else {
+      if (mounted && !_isListenerActive) {
+        setState(() => _isListenerActive = true);
+      }
+    }
+
+    // 2. Sinkronisasi data transaksi lokal dari database Hive
+    await _loadData();
+
+    // 3. Flush antrean offline jika ada transaksi tertunda
+    _autoRetryQueue();
   }
 
   // ── DATA LOADING ─────────────────────────────────────────

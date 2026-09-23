@@ -15,6 +15,7 @@
 // ============================================================
 
 import 'dart:convert';
+import 'package:flutter/widgets.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/transaction_model.dart';
 import '../models/webhook_preset.dart';
@@ -30,6 +31,7 @@ class DatabaseService {
   static Future<void> ensureInitialized() async {
     if (_isInitialized) return;
     try {
+      WidgetsFlutterBinding.ensureInitialized();
       await Hive.initFlutter();
       if (!Hive.isAdapterRegistered(0)) {
         Hive.registerAdapter(TransactionModelAdapter());

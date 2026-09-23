@@ -35,6 +35,10 @@ class _WebhookSettingsScreenState extends State<WebhookSettingsScreen> {
   String _payloadFormat = 'raw';
   bool _isAutoForward = true;
   bool _forwardFinancialOnly = true;
+  String _fallbackUrl = '';
+  String _webhookSecret = '';
+  bool _isTestingFallback = false;
+  WebhookResult? _fallbackTestResult;
 
   bool _isLoading = true;
   String? _testingPresetId;
@@ -52,6 +56,8 @@ class _WebhookSettingsScreenState extends State<WebhookSettingsScreen> {
     final format = await DatabaseService.getPayloadFormat();
     final isAuto = await DatabaseService.isAutoForwardEnabled();
     final financialOnly = await DatabaseService.isForwardFinancialOnly();
+    final fallbackUrl = await DatabaseService.getFallbackWebhookUrl();
+    final secret = await DatabaseService.getWebhookSecret();
 
     if (mounted) {
       setState(() {
@@ -60,6 +66,8 @@ class _WebhookSettingsScreenState extends State<WebhookSettingsScreen> {
         _payloadFormat = format;
         _isAutoForward = isAuto;
         _forwardFinancialOnly = financialOnly;
+        _fallbackUrl = fallbackUrl;
+        _webhookSecret = secret;
         _isLoading = false;
       });
     }
@@ -601,6 +609,142 @@ class _WebhookSettingsScreenState extends State<WebhookSettingsScreen> {
     }
   }
 
+  Future<void> _openEditFallbackDialog() async {
+    final ctrl = TextEditingController(text: _fallbackUrl);
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Endpoint Failover / Cadangan',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Jika endpoint utama (misal: ADB USB 127.0.0.1:8000) gagal terhubung, DompetKu langsung mengalihkan pengiriman ke endpoint cadangan (misal: IP Wi-Fi 192.168.100.61:8000) sebelum masuk ke antrean offline.',
+              style: TextStyle(fontSize: 12, color: Colors.black87),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              decoration: InputDecoration(
+                labelText: 'URL Endpoint Failover',
+                hintText: 'http://192.168.100.61:8000/api/webhook/dompetku',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final newUrl = ctrl.text.trim();
+              await DatabaseService.setFallbackWebhookUrl(newUrl);
+              if (ctx.mounted) Navigator.pop(ctx);
+              _loadAll();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF00897B),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _testFallbackUrl() async {
+    if (_fallbackUrl.isEmpty) return;
+    setState(() {
+      _isTestingFallback = true;
+      _fallbackTestResult = null;
+    });
+
+    final authHeader = await DatabaseService.getAuthHeader();
+    final result = await WebhookService.testConnection(
+      _fallbackUrl,
+      authHeader: authHeader.isNotEmpty ? authHeader : null,
+      secret: _webhookSecret.isNotEmpty ? _webhookSecret : null,
+    );
+
+    if (mounted) {
+      setState(() {
+        _isTestingFallback = false;
+        _fallbackTestResult = result;
+      });
+    }
+  }
+
+  Future<void> _openEditSecretDialog() async {
+    final ctrl = TextEditingController(text: _webhookSecret);
+    bool obscure = true;
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            'Webhook Secret (HMAC-SHA256)',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Kunci rahasia untuk menandatangani setiap notifikasi dengan header X-Dompetku-Signature dan X-Dompetku-Timestamp. Wajib cocok dengan config services.dompetku.webhook_secret di server Gastonyk.',
+                style: TextStyle(fontSize: 12, color: Colors.black87),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                obscureText: obscure,
+                decoration: InputDecoration(
+                  labelText: 'HMAC Secret Key',
+                  hintText: 'Masukkan secret key backend...',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  suffixIcon: IconButton(
+                    icon: Icon(obscure ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () {
+                      setDialogState(() => obscure = !obscure);
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Batal'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final newSecret = ctrl.text.trim();
+                await DatabaseService.setWebhookSecret(newSecret);
+                if (ctx.mounted) Navigator.pop(ctx);
+                _loadAll();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00897B),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Simpan Secret'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -956,6 +1100,258 @@ class _WebhookSettingsScreenState extends State<WebhookSettingsScreen> {
                 }).toList(),
               ),
             ),
+
+                const SizedBox(height: 16),
+
+                // ── KEAMANAN KERAS & REDUNDANSI JARINGAN ───────
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: const Color(0xFF00897B).withValues(alpha: 0.3),
+                      width: 1.2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF00897B).withValues(alpha: 0.05),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF00897B).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.security_rounded,
+                              size: 18,
+                              color: Color(0xFF00897B),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Keamanan Keras & Redundansi (24/7)',
+                              style: GoogleFonts.inter(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: Colors.grey.shade900,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Fitur otomatis untuk menjamin DompetKu berjalan non-stop sebagai Payment Gateway Gastonyk tanpa terputus kabel USB atau dipalsukan peretas.',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: Colors.grey.shade600,
+                          height: 1.4,
+                        ),
+                      ),
+                      const Divider(height: 22),
+
+                      // ITEM 1: HMAC SECRET KEY
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            _webhookSecret.isNotEmpty ? Icons.lock_rounded : Icons.lock_open_rounded,
+                            size: 18,
+                            color: _webhookSecret.isNotEmpty ? Colors.green.shade700 : Colors.amber.shade800,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      'HMAC-SHA256 Signature',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: _webhookSecret.isNotEmpty ? Colors.green.shade50 : Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                          color: _webhookSecret.isNotEmpty ? Colors.green.shade300 : Colors.grey.shade300,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        _webhookSecret.isNotEmpty ? 'AKTIF' : 'NONAKTIF',
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                          color: _webhookSecret.isNotEmpty ? Colors.green.shade800 : Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  _webhookSecret.isNotEmpty
+                                      ? 'Setiap payload ditandatangani dengan X-Dompetku-Signature & Timestamp anti-replay.'
+                                      : 'Belum diatur. Gastonyk mode ketat mewajibkan secret ini.',
+                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _openEditSecretDialog,
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                              minimumSize: const Size(50, 32),
+                            ),
+                            child: Text(
+                              _webhookSecret.isNotEmpty ? 'Ubah' : 'Atur',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const Divider(height: 22),
+
+                      // ITEM 2: FAILOVER ENDPOINT
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.alt_route_rounded,
+                            size: 18,
+                            color: _fallbackUrl.isNotEmpty ? const Color(0xFF00897B) : Colors.grey.shade500,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Endpoint Failover (Wi-Fi/LAN)',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: _fallbackUrl.isNotEmpty ? Colors.teal.shade50 : Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                          color: _fallbackUrl.isNotEmpty ? Colors.teal.shade300 : Colors.grey.shade300,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        _fallbackUrl.isNotEmpty ? 'TERPASANG' : 'KOSONG',
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                          color: _fallbackUrl.isNotEmpty ? const Color(0xFF00695C) : Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  _fallbackUrl.isNotEmpty
+                                      ? _fallbackUrl
+                                      : 'Jika kabel USB ADB putus, kirim ke IP LAN cadangan.',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: _fallbackUrl.isNotEmpty ? Colors.grey.shade800 : Colors.grey.shade600,
+                                    fontFamily: _fallbackUrl.isNotEmpty ? 'monospace' : null,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _openEditFallbackDialog,
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                              minimumSize: const Size(50, 32),
+                            ),
+                            child: Text(
+                              _fallbackUrl.isNotEmpty ? 'Ubah' : 'Atur',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      if (_fallbackUrl.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            SizedBox(
+                              height: 30,
+                              child: OutlinedButton.icon(
+                                onPressed: _isTestingFallback ? null : _testFallbackUrl,
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  side: BorderSide(color: Colors.grey.shade300),
+                                ),
+                                icon: _isTestingFallback
+                                    ? const SizedBox(
+                                        width: 12,
+                                        height: 12,
+                                        child: CircularProgressIndicator(strokeWidth: 1.5),
+                                      )
+                                    : const Icon(Icons.sensors, size: 14),
+                                label: Text(
+                                  _isTestingFallback ? 'Menguji Failover...' : 'Test Ping Failover',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_fallbackTestResult != null) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            _fallbackTestResult!.isSuccess
+                                ? '✅ Failover berhasil merespons HTTP ${_fallbackTestResult!.statusCode}'
+                                : '❌ Gagal: ${_fallbackTestResult!.errorMessage}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: _fallbackTestResult!.isSuccess ? Colors.green.shade700 : Colors.red.shade700,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ],
+                  ),
+                ),
 
                 const SizedBox(height: 16),
 
