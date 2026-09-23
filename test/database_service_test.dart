@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:dompetku/models/transaction_model.dart';
+import 'package:dompetku/models/webhook_preset.dart';
 import 'package:dompetku/services/database_service.dart';
 import 'package:dompetku/services/webhook_service.dart';
 
@@ -303,6 +305,104 @@ void main() {
       final updatedTx = await DatabaseService.getTransaction('tx_failover_1');
       expect(updatedTx?.webhookStatus, equals('success'));
       expect(updatedTx?.webhookHttpCode, equals(200));
+    });
+
+    test('sendTransaction executes automatic failover when primary returns HTTP 502 Bad Gateway', () async {
+      const primaryUrl = 'http://127.0.0.1:8000/api/webhook/dompetku';
+      const fallbackUrl = 'http://192.168.100.61:8000/api/webhook/dompetku';
+
+      await DatabaseService.setWebhookUrl(primaryUrl);
+      await DatabaseService.setFallbackWebhookUrl(fallbackUrl);
+      await DatabaseService.setAutoForwardEnabled(true);
+
+      final tx = TransactionModel(
+        id: 'tx_failover_502',
+        amount: 100000,
+        type: 'bca_in',
+        appSource: 'BCA Mobile',
+        payerName: 'Fajar Alfian',
+        dateTime: DateTime.now(),
+        rawMessage: 'BCA: Rp 100.000 dari Fajar Alfian',
+        appPackage: 'com.bca',
+      );
+      await DatabaseService.saveTransaction(tx);
+
+      final mockClient = MockClient((request) async {
+        if (request.url.toString() == primaryUrl) {
+          return http.Response('Bad Gateway (Proxy Down)', 502);
+        } else if (request.url.toString() == fallbackUrl) {
+          return http.Response('{"status":"fallback_success"}', 200);
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      final result = await WebhookService.sendTransaction(tx, client: mockClient);
+      expect(result.isSuccess, isTrue);
+      expect(result.statusCode, equals(200));
+
+      final updatedTx = await DatabaseService.getTransaction('tx_failover_502');
+      expect(updatedTx?.webhookStatus, equals('success'));
+      expect(updatedTx?.webhookHttpCode, equals(200));
+    });
+
+    test('sendTransaction executes automatic failover when primary encounters TimeoutException', () async {
+      const primaryUrl = 'http://127.0.0.1:8000/api/webhook/dompetku';
+      const fallbackUrl = 'http://192.168.100.61:8000/api/webhook/dompetku';
+
+      await DatabaseService.setWebhookUrl(primaryUrl);
+      await DatabaseService.setFallbackWebhookUrl(fallbackUrl);
+      await DatabaseService.setAutoForwardEnabled(true);
+
+      final tx = TransactionModel(
+        id: 'tx_failover_timeout',
+        amount: 80000,
+        type: 'dana_in',
+        appSource: 'DANA',
+        payerName: 'Jonatan Christie',
+        dateTime: DateTime.now(),
+        rawMessage: 'DANA: Rp 80.000 dari Jonatan Christie',
+        appPackage: 'id.dana',
+      );
+      await DatabaseService.saveTransaction(tx);
+
+      final mockClient = MockClient((request) async {
+        if (request.url.toString() == primaryUrl) {
+          throw TimeoutException('ADB tunnel hung');
+        } else if (request.url.toString() == fallbackUrl) {
+          return http.Response('{"status":"saved_via_fallback"}', 200);
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      final result = await WebhookService.sendTransaction(tx, client: mockClient);
+      expect(result.isSuccess, isTrue);
+      expect(result.statusCode, equals(200));
+
+      final updatedTx = await DatabaseService.getTransaction('tx_failover_timeout');
+      expect(updatedTx?.webhookStatus, equals('success'));
+    });
+
+    test('activatePreset cleanly resets authHeader when target preset has no authHeader', () async {
+      final presetWithAuth = WebhookPreset(
+        id: 'preset_with_auth',
+        name: 'Server Auth',
+        url: 'https://auth.example.com',
+        authHeader: 'Bearer old_secret_123',
+      );
+      final presetWithoutAuth = WebhookPreset(
+        id: 'preset_no_auth',
+        name: 'Server Gastonyk Clean',
+        url: 'http://127.0.0.1:8000/api/webhook/dompetku',
+        authHeader: null,
+      );
+
+      await DatabaseService.saveWebhookPresets([presetWithAuth, presetWithoutAuth]);
+
+      await DatabaseService.activatePreset('preset_with_auth');
+      expect(await DatabaseService.getAuthHeader(), equals('Bearer old_secret_123'));
+
+      await DatabaseService.activatePreset('preset_no_auth');
+      expect(await DatabaseService.getAuthHeader(), isEmpty);
     });
   });
 }

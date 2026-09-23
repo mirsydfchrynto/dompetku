@@ -431,9 +431,7 @@ class DatabaseService {
     final list = await getWebhookPresets();
     final target = list.firstWhere((p) => p.id == id, orElse: () => list.first);
     await setWebhookUrl(target.url);
-    if (target.authHeader != null) {
-      await setAuthHeader(target.authHeader!);
-    }
+    await setAuthHeader(target.authHeader ?? '');
     await setWebhookSecret(target.webhookSecret ?? '');
     await setPayloadFormat(target.payloadFormat);
   }

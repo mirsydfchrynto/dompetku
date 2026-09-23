@@ -150,6 +150,40 @@ class WebhookService {
     return '${transaction.appSource}: ${transaction.rawMessage}';
   }
 
+  /// Mencoba pengiriman ke endpoint failover cadangan jika tersedia.
+  static Future<http.Response?> _tryFallbackPost(
+    http.Client httpClient, {
+    required String primaryUrl,
+    required String body,
+    required String authHeader,
+    required String webhookSecret,
+    required int timestamp,
+  }) async {
+    final fallbackUrl = await DatabaseService.getFallbackWebhookUrl();
+    if (fallbackUrl.isNotEmpty && fallbackUrl != primaryUrl) {
+      try {
+        final fallbackUri = Uri.parse(fallbackUrl);
+        final fallbackHeaders = _buildHeaders(
+          authHeader,
+          url: fallbackUrl,
+          secret: webhookSecret,
+          body: body,
+          timestamp: timestamp,
+        );
+        return await httpClient
+            .post(
+              fallbackUri,
+              headers: fallbackHeaders,
+              body: body,
+            )
+            .timeout(_timeout);
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
+
   /// Mengirim transaksi ke endpoint webhook.
   static Future<WebhookResult> sendTransaction(
     TransactionModel transaction, {
@@ -217,13 +251,31 @@ class WebhookService {
       );
       final uri = Uri.parse(webhookUrl);
 
-      final response = await httpClient
+      http.Response response = await httpClient
           .post(
             uri,
             headers: headers,
             body: body,
           )
           .timeout(_timeout);
+
+      // Jika server utama merespons 500-504 (Server Error / Bad Gateway / Gateway Timeout),
+      // otomatis coba kirim ke endpoint failover sebelum menyerah
+      if (response.statusCode >= 500 && response.statusCode <= 504) {
+        final fallbackResp = await _tryFallbackPost(
+          httpClient,
+          primaryUrl: webhookUrl,
+          body: body,
+          authHeader: authHeader,
+          webhookSecret: webhookSecret,
+          timestamp: timestamp,
+        );
+        if (fallbackResp != null &&
+            fallbackResp.statusCode >= 200 &&
+            fallbackResp.statusCode < 300) {
+          response = fallbackResp;
+        }
+      }
 
       final isSuccess = response.statusCode >= 200 && response.statusCode < 300;
 
@@ -243,6 +295,31 @@ class WebhookService {
         errorMessage: isSuccess ? null : 'HTTP ${response.statusCode}',
       );
     } on TimeoutException {
+      // ── FAILOVER UPON TIMEOUT ──────────────────────────────
+      final fallbackResp = await _tryFallbackPost(
+        httpClient,
+        primaryUrl: webhookUrl,
+        body: body,
+        authHeader: authHeader,
+        webhookSecret: webhookSecret,
+        timestamp: timestamp,
+      );
+      if (fallbackResp != null &&
+          fallbackResp.statusCode >= 200 &&
+          fallbackResp.statusCode < 300) {
+        final updated = transaction.copyWith(
+          webhookStatus: 'success',
+          webhookHttpCode: fallbackResp.statusCode,
+          webhookSentAt: DateTime.now(),
+          webhookError: null,
+        );
+        await DatabaseService.updateTransaction(updated);
+        return WebhookResult(
+          isSuccess: true,
+          statusCode: fallbackResp.statusCode,
+        );
+      }
+
       final updated = transaction.copyWith(
         webhookStatus: 'failed',
         webhookSentAt: DateTime.now(),
@@ -254,46 +331,29 @@ class WebhookService {
         errorMessage: 'Request timeout (10 detik)',
       );
     } on SocketException catch (e) {
-      // ── AUTOMATIC FAILOVER ─────────────────────────────────
-      // Jika endpoint utama (misal: ADB USB 127.0.0.1) gagal konek,
-      // coba fallback endpoint (misal: Wi-Fi LAN / IP server) jika ada
-      final fallbackUrl = await DatabaseService.getFallbackWebhookUrl();
-      if (fallbackUrl.isNotEmpty && fallbackUrl != webhookUrl) {
-        try {
-          final fallbackUri = Uri.parse(fallbackUrl);
-          final fallbackHeaders = _buildHeaders(
-            authHeader,
-            url: fallbackUrl,
-            secret: webhookSecret,
-            body: body,
-            timestamp: timestamp,
-          );
-          final fallbackResponse = await httpClient
-              .post(
-                fallbackUri,
-                headers: fallbackHeaders,
-                body: body,
-              )
-              .timeout(_timeout);
-
-          final isFallbackSuccess = fallbackResponse.statusCode >= 200 &&
-              fallbackResponse.statusCode < 300;
-          if (isFallbackSuccess) {
-            final updated = transaction.copyWith(
-              webhookStatus: 'success',
-              webhookHttpCode: fallbackResponse.statusCode,
-              webhookSentAt: DateTime.now(),
-              webhookError: null,
-            );
-            await DatabaseService.updateTransaction(updated);
-            return WebhookResult(
-              isSuccess: true,
-              statusCode: fallbackResponse.statusCode,
-            );
-          }
-        } catch (_) {
-          // Fallback juga gagal, lanjut simpan status failed ke offline buffer
-        }
+      // ── FAILOVER UPON SOCKET EXCEPTION ─────────────────────
+      final fallbackResp = await _tryFallbackPost(
+        httpClient,
+        primaryUrl: webhookUrl,
+        body: body,
+        authHeader: authHeader,
+        webhookSecret: webhookSecret,
+        timestamp: timestamp,
+      );
+      if (fallbackResp != null &&
+          fallbackResp.statusCode >= 200 &&
+          fallbackResp.statusCode < 300) {
+        final updated = transaction.copyWith(
+          webhookStatus: 'success',
+          webhookHttpCode: fallbackResp.statusCode,
+          webhookSentAt: DateTime.now(),
+          webhookError: null,
+        );
+        await DatabaseService.updateTransaction(updated);
+        return WebhookResult(
+          isSuccess: true,
+          statusCode: fallbackResp.statusCode,
+        );
       }
 
       final updated = transaction.copyWith(
