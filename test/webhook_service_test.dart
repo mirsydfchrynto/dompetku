@@ -36,6 +36,25 @@ void main() {
       expect(decoded['appSource'], equals('GoPay'));
       expect(decoded['payerName'], equals('Budi S.'));
     });
+
+    test('extracts orderCode GAS- format from rawMessage and includes in json_string', () {
+      final gasTx = TransactionModel(
+        id: '1700000000001',
+        amount: 150000.0,
+        type: 'bca_in',
+        appSource: 'BCA Mobile',
+        payerName: 'Rina',
+        dateTime: DateTime.now(),
+        rawMessage: 'BCA: Transfer Rp 150.000 dari Rina ket: GAS-202609-0042',
+        appPackage: 'com.bca',
+      );
+
+      expect(gasTx.orderCode, equals('GAS-202609-0042'));
+
+      final jsonMsg = WebhookService.formatMessage(gasTx, 'json_string');
+      final decoded = jsonDecode(jsonMsg) as Map<String, dynamic>;
+      expect(decoded['order_code'], equals('GAS-202609-0042'));
+    });
   });
 
   group('WebhookService testConnection with MockClient', () {
@@ -45,6 +64,8 @@ void main() {
         expect(request.headers['content-type'], contains('application/json'));
         final body = jsonDecode(request.body) as Map<String, dynamic>;
         expect(body['message'], isNotEmpty);
+        expect(body['action'], equals('ping'));
+        expect(body['event'], equals('ping'));
         return http.Response(jsonEncode({'status': 'ok'}), 200);
       });
 

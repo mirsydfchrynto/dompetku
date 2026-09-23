@@ -339,6 +339,29 @@ class _DetailScreenState extends State<DetailScreen> {
                           ],
                         ),
                       ),
+                      if (_transaction.orderCode != null) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8F5E9),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: const Color(0xFFA5D6A7)),
+                          ),
+                          child: Text(
+                            'ORDER: ${_transaction.orderCode!}',
+                            style: const TextStyle(
+                              color: Color(0xFF2E7D32),
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ),
+                      ],
                       if (_transaction.type == 'demo' ||
                           _transaction.type.startsWith('demo') ||
                           _transaction.type.startsWith('simulator'))
@@ -373,6 +396,13 @@ class _DetailScreenState extends State<DetailScreen> {
             _InfoSection(
               title: 'Informasi Transaksi',
               children: [
+                if (_transaction.orderCode != null)
+                  _InfoRow(
+                    label: 'Kode Pesanan Web',
+                    value: _transaction.orderCode!,
+                    valueColor: const Color(0xFF00796B),
+                    isBold: true,
+                  ),
                 _InfoRow(label: 'Via', value: _transaction.appSource),
                 _InfoRow(
                   label: _transaction.isIncoming ? 'Pengirim / Pembayar' : 'Penerima / Tujuan',
@@ -623,8 +653,15 @@ class _InfoSection extends StatelessWidget {
 class _InfoRow extends StatelessWidget {
   final String label;
   final String value;
+  final Color? valueColor;
+  final bool isBold;
 
-  const _InfoRow({required this.label, required this.value});
+  const _InfoRow({
+    required this.label,
+    required this.value,
+    this.valueColor,
+    this.isBold = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -643,9 +680,10 @@ class _InfoRow extends StatelessWidget {
             child: Text(
               value,
               textAlign: TextAlign.end,
-              style: const TextStyle(
-                fontWeight: FontWeight.w500,
+              style: TextStyle(
+                fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
                 fontSize: 13,
+                color: valueColor,
               ),
             ),
           ),

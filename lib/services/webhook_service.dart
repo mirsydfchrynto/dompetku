@@ -98,8 +98,9 @@ class WebhookService {
   /// Membuat string payload isi kolom `message` sesuai preferensi.
   static String formatMessage(TransactionModel transaction, String format) {
     if (format == 'json_string') {
-      final map = {
+      final map = <String, dynamic>{
         'id': transaction.id,
+        if (transaction.orderCode != null) 'order_code': transaction.orderCode,
         'appSource': transaction.appSource,
         'amount': transaction.amount,
         'formattedAmount': transaction.formattedAmount,
@@ -159,9 +160,15 @@ class WebhookService {
       final payloadFormat = await DatabaseService.getPayloadFormat();
       final messageContent = formatMessage(transaction, payloadFormat);
 
-      final body = jsonEncode({
+      final payloadMap = <String, dynamic>{
         'message': messageContent,
-      });
+        'amount': transaction.amount,
+        'id': transaction.id,
+        'appSource': transaction.appSource,
+        if (transaction.orderCode != null) 'order_code': transaction.orderCode,
+      };
+
+      final body = jsonEncode(payloadMap);
 
       final headers = _buildHeaders(authHeader, url: webhookUrl);
       final uri = Uri.parse(webhookUrl);
@@ -269,7 +276,9 @@ class WebhookService {
 
       final headers = _buildHeaders(authHeader, url: cleanUrl);
       final body = jsonEncode({
-        'message': 'Test koneksi webhook dari DompetKu Xiaomi',
+        'action': 'ping',
+        'event': 'ping',
+        'message': 'Test koneksi webhook dari DompetKu Xiaomi (ping)',
       });
 
       final response = await httpClient

@@ -136,4 +136,25 @@ class TransactionModel extends HiveObject {
 
   // Format nominal dengan tanda + atau - (misal: "+ Rp 50.000" atau "- Rp 50.000")
   String get displayAmount => '${isIncoming ? '+' : '-'} $formattedAmount';
+
+  /// Ekstrak kode pesanan / invoice dari rawMessage jika ada.
+  /// Mendukung format resmi Gastonyk (GAS-...), Invoice umum (INV/..., INV-...), dan Order (ORD-..., ORDER-...).
+  String? get orderCode {
+    if (rawMessage.isEmpty) return null;
+    final gasMatch = RegExp(r'\b(GAS-[A-Za-z0-9\-]+)\b', caseSensitive: false)
+        .firstMatch(rawMessage);
+    if (gasMatch != null) return gasMatch.group(1)?.toUpperCase();
+
+    final invMatch =
+        RegExp(r'\b(INV(?:/|-)[A-Za-z0-9\/\-]+)\b', caseSensitive: false)
+            .firstMatch(rawMessage);
+    if (invMatch != null) return invMatch.group(1)?.toUpperCase();
+
+    final ordMatch =
+        RegExp(r'\b(ORD(?:ER)?-[A-Za-z0-9\-]+)\b', caseSensitive: false)
+            .firstMatch(rawMessage);
+    if (ordMatch != null) return ordMatch.group(1)?.toUpperCase();
+
+    return null;
+  }
 }

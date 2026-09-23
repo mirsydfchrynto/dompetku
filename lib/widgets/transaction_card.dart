@@ -267,20 +267,52 @@ class TransactionCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 3),
-                    Text(
-                      transaction.isIncoming
-                          ? (transaction.payerName != 'Pelanggan'
-                              ? 'Dari: ${transaction.payerName}'
-                              : 'Pembayar: Pelanggan')
-                          : (transaction.payerName.startsWith('Tarik Tunai')
-                              ? transaction.payerName
-                              : 'Ke: ${transaction.payerName}'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            transaction.isIncoming
+                                ? (transaction.payerName != 'Pelanggan'
+                                    ? 'Dari: ${transaction.payerName}'
+                                    : 'Pembayar: Pelanggan')
+                                : (transaction.payerName.startsWith('Tarik Tunai')
+                                    ? transaction.payerName
+                                    : 'Ke: ${transaction.payerName}'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ),
+                        if (transaction.orderCode != null) ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4.5,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE8F5E9),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: const Color(0xFFA5D6A7),
+                                width: 0.5,
+                              ),
+                            ),
+                            child: Text(
+                              transaction.orderCode!,
+                              style: const TextStyle(
+                                fontSize: 8,
+                                color: Color(0xFF2E7D32),
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),
