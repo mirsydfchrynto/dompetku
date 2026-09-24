@@ -9,8 +9,11 @@ import 'package:dompetku/models/webhook_preset.dart';
 import 'package:dompetku/services/database_service.dart';
 import 'package:dompetku/services/webhook_service.dart';
 
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  FlutterSecureStorage.setMockInitialValues({});
 
   late Directory tempDir;
 
@@ -29,6 +32,46 @@ void main() {
     if (await tempDir.exists()) {
       await tempDir.delete(recursive: true);
     }
+  });
+
+  group('P0 DEDUPLICATION CORRECTNESS (Phase D3)', () {
+    test('A -> same payment notification repeated = duplicate', () async {
+      final now = DateTime.now();
+      
+      final txA1 = TransactionModel(
+        id: 'tx_A1', amount: 50000, type: 'gopay_in', appSource: 'GoPay', payerName: 'Budi Santoso', 
+        dateTime: now, rawMessage: 'GoPay: Pembayaran diterima Rp 50.000 dari Budi Santoso', appPackage: 'com.gojek.gopay',
+        dedupeFingerprint: 'md5_same_fingerprint',
+      );
+      await DatabaseService.saveTransaction(txA1);
+
+      final txA2 = TransactionModel(
+        id: 'tx_A2', amount: 50000, type: 'gopay_in', appSource: 'GoPay', payerName: 'Budi Santoso', 
+        dateTime: now.add(const Duration(seconds: 5)), rawMessage: 'GoPay: Pembayaran diterima Rp 50.000 dari Budi Santoso', appPackage: 'com.gojek.gopay',
+        dedupeFingerprint: 'md5_same_fingerprint',
+      );
+      
+      expect(await DatabaseService.isDuplicateTransaction(txA2), isTrue);
+    });
+
+    test('A and B -> same amount, same source, same payer = NOT duplicate when separate transactions', () async {
+      final now = DateTime.now();
+      
+      final txA = TransactionModel(
+        id: 'tx_A', amount: 50000, type: 'gopay_in', appSource: 'GoPay', payerName: 'Budi Santoso', 
+        dateTime: now, rawMessage: 'GoPay: Pembayaran diterima Rp 50.000 dari Budi Santoso', appPackage: 'com.gojek.gopay',
+        dedupeFingerprint: 'md5_fingerprint_A_key1',
+      );
+      await DatabaseService.saveTransaction(txA);
+
+      final txB = TransactionModel(
+        id: 'tx_B', amount: 50000, type: 'gopay_in', appSource: 'GoPay', payerName: 'Budi Santoso', 
+        dateTime: now.add(const Duration(minutes: 5)), rawMessage: 'GoPay: Pembayaran diterima Rp 50.000 dari Budi Santoso', appPackage: 'com.gojek.gopay',
+        dedupeFingerprint: 'md5_fingerprint_B_key2', // Different key because it's a new Android notification
+      );
+      
+      expect(await DatabaseService.isDuplicateTransaction(txB), isFalse);
+    });
   });
 
   group('DatabaseService Deduplication Tests', () {
@@ -90,8 +133,8 @@ void main() {
       expect(isDup, isFalse);
     });
 
-    test('allows transaction outside time window (> 90 seconds)', () async {
-      final oldTime = DateTime.now().subtract(const Duration(seconds: 120));
+    test('P0 HARDENING: allows transaction outside time window (> 1 hour)', () async {
+      final oldTime = DateTime.now().subtract(const Duration(minutes: 65));
       final tx1 = TransactionModel(
         id: 'tx_1',
         amount: 50000,

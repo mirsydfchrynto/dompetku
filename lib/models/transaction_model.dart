@@ -64,6 +64,18 @@ class TransactionModel extends HiveObject {
   @HiveField(11)
   final DateTime? webhookSentAt; // Waktu pengiriman ke webhook
 
+  @HiveField(12)
+  final int retryCount; // P0 HARDENING: Bounded retry
+
+  @HiveField(13)
+  final DateTime? nextRetryAt; // P0 HARDENING: Scheduled retry
+
+  @HiveField(14)
+  final bool isDeadLetter; // P0 HARDENING: Terminal failure state
+
+  @HiveField(15)
+  final String dedupeFingerprint; // P0 HARDENING: Deterministic identity
+
   TransactionModel({
     required this.id,
     required this.amount,
@@ -77,7 +89,11 @@ class TransactionModel extends HiveObject {
     this.webhookHttpCode,
     this.webhookError,
     this.webhookSentAt,
-  });
+    this.retryCount = 0,
+    this.nextRetryAt,
+    this.isDeadLetter = false,
+    String? dedupeFingerprint,
+  }) : dedupeFingerprint = dedupeFingerprint ?? '';
 
   TransactionModel copyWith({
     String? id,
@@ -92,6 +108,10 @@ class TransactionModel extends HiveObject {
     int? webhookHttpCode,
     String? webhookError,
     DateTime? webhookSentAt,
+    int? retryCount,
+    DateTime? nextRetryAt,
+    bool? isDeadLetter,
+    String? dedupeFingerprint,
   }) {
     return TransactionModel(
       id: id ?? this.id,
@@ -106,6 +126,10 @@ class TransactionModel extends HiveObject {
       webhookHttpCode: webhookHttpCode ?? this.webhookHttpCode,
       webhookError: webhookError ?? this.webhookError,
       webhookSentAt: webhookSentAt ?? this.webhookSentAt,
+      retryCount: retryCount ?? this.retryCount,
+      nextRetryAt: nextRetryAt ?? this.nextRetryAt,
+      isDeadLetter: isDeadLetter ?? this.isDeadLetter,
+      dedupeFingerprint: dedupeFingerprint ?? this.dedupeFingerprint,
     );
   }
 

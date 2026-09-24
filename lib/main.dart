@@ -22,6 +22,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:dompetku/services/database_service.dart' as dompetku_db;
 import 'models/transaction_model.dart';
 import 'screens/permission_screen.dart';
 import 'screens/home_screen.dart';
@@ -52,6 +53,13 @@ void main() async {
   // Inisialisasi format tanggal bahasa Indonesia
   // Agar "September" bisa muncul dalam Bahasa Indonesia
   await initializeDateFormatting('id_ID', null);
+
+  // P1 HARDENING: Panggil pembersihan rawMessage pada saat startup
+  try {
+    await dompetku_db.DatabaseService.cleanupOldTransactions();
+  } catch (e) {
+    debugPrint('Cleanup failed: $e');
+  }
 
   // Jalankan aplikasi!
   runApp(const DompetKuApp());

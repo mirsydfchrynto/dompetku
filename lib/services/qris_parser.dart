@@ -21,6 +21,8 @@
 //   5. 15+ Ekosistem Bank & E-Wallet Resmi + Smart Fallback.
 // ============================================================
 
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import '../models/transaction_model.dart';
 
 // ── CLASS KONFIGURASI PER BANK & E-WALLET ────────────────────
@@ -588,6 +590,8 @@ class QrisParser {
     required String title,
     required String body,
     required String package,
+    String? notificationKey,
+    int? notificationTimestamp,
   }) {
     final fullText = '$title $body'.toLowerCase();
 
@@ -655,6 +659,17 @@ class QrisParser {
 
       final typeCode = '${resolvedBaseCode}_in';
 
+      // P0 HARDENING: Precise deduplication
+      String rawFingerprint = '${package}_${amount}_${partyName.toLowerCase()}';
+      if (notificationKey != null && notificationKey.isNotEmpty) {
+        rawFingerprint += '_$notificationKey';
+      }
+      if (notificationTimestamp != null) {
+        rawFingerprint += '_$notificationTimestamp';
+      }
+      
+      final String fingerprint = md5.convert(utf8.encode(rawFingerprint)).toString();
+
       return TransactionModel(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         amount: amount,
@@ -664,63 +679,15 @@ class QrisParser {
         dateTime: DateTime.now(),
         rawMessage: '$title\n$body',
         appPackage: package,
+        dedupeFingerprint: fingerprint,
       );
     }
 
-    // ── LANGKAH 2: Fallback Pintar (Generic In Detector) ──────
-    // Untuk bank atau fintech baru yang belum terdaftar di daftar spesifik
-    final generalKeywords = [
-      'qris',
-      'transaksi qr',
-      'pembayaran qr',
-      'scan qr',
-      'qr code',
-      'uang masuk',
-      'saldo masuk',
-      'saldo dana',
-      'berhasil diterima',
-      'transfer masuk',
-      'dana masuk',
-      'kamu menerima',
-      'telah masuk ke rekening',
-      'masuk ke rekening',
-      'saldo bertambah',
-      'ada uang masuk',
-      'kiriman uang',
-    ];
-
-    final isGeneralFinancial =
-        generalKeywords.any((keyword) => fullText.contains(keyword));
-
-    if (!isGeneralFinancial) {
-      return null;
-    }
-
-    final amount = _extractAmount(body, _universalAmountPattern) ??
-        _extractAmount(title, _universalAmountPattern);
-
-    if (amount == null || amount <= 0) {
-      return null;
-    }
-
-    final sourceName = title.isNotEmpty ? title : 'Pembayaran';
-    final fallbackBase = _formatBaseCode(sourceName);
-    final fallbackType = '${fallbackBase}_in';
-
-    final partyName = _extractPayer(body, _universalPayerPattern) != 'Pelanggan'
-        ? _extractPayer(body, _universalPayerPattern)
-        : _extractPayer(title, _universalPayerPattern);
-
-    return TransactionModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      amount: amount,
-      type: fallbackType,
-      appSource: sourceName,
-      payerName: partyName,
-      dateTime: DateTime.now(),
-      rawMessage: '$title\n$body',
-      appPackage: package,
-    );
+    // ── LANGKAH 2: Fallback Pintar (Generic In Detector) - DISABLED (HARDENED) ──────
+    // P0 - DISABLE UNSAFE GENERIC PAYMENT DETECTION
+    // Unknown sources must not trigger automatic payment webhook.
+    // We strictly use financial source allowlisting (_parsers).
+    return null;
   }
 
   // ── DETEKSI PROMOSI & SPAM NON-FINANSIAL ─────────────────────

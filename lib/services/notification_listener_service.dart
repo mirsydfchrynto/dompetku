@@ -102,7 +102,9 @@ class AppNotificationListenerService {
       final body = event.text ?? '';
       final package = event.packageName ?? '';
 
-      debugPrint('[DompetKu] Received event: pkg=$package, title=$title, body=$body');
+      if (kDebugMode) {
+        debugPrint('[DompetKu] Received event: pkg=$package, title=$title, body=$body');
+      }
 
       // Pastikan environment database lokal siap
       await DatabaseService.ensureInitialized();
@@ -112,21 +114,27 @@ class AppNotificationListenerService {
         title: title,
         body: body,
         package: package,
+        notificationKey: event.key,
+        notificationTimestamp: event.timestamp,
       );
 
       if (transaction != null) {
         final isDuplicate =
             await DatabaseService.isDuplicateTransaction(transaction);
         if (isDuplicate) {
-          debugPrint(
-            '[DompetKu] Transaksi duplikat diabaikan: ${transaction.appSource} '
-            'Rp ${transaction.amount} (${transaction.payerName})',
-          );
+          if (kDebugMode) {
+            debugPrint(
+              '[DompetKu] Transaksi duplikat diabaikan: ${transaction.appSource} '
+              'Rp ${transaction.amount} (${transaction.payerName})',
+            );
+          }
           return;
         }
 
-        debugPrint(
-            '[DompetKu] QRIS Transaksi terdeteksi: ${transaction.appSource} Rp ${transaction.amount}');
+        if (kDebugMode) {
+          debugPrint(
+              '[DompetKu] QRIS Transaksi terdeteksi: ${transaction.appSource} Rp ${transaction.amount}');
+        }
         await _processAndForward(transaction);
       } else {
         // Jika bukan format finansial standar, cek apakah user mengaktifkan tangkap semua notifikasi

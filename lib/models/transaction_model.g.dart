@@ -29,13 +29,17 @@ class TransactionModelAdapter extends TypeAdapter<TransactionModel> {
       webhookHttpCode: fields[9] as int?,
       webhookError: fields[10] as String?,
       webhookSentAt: fields[11] as DateTime?,
+      retryCount: fields[12] as int,
+      nextRetryAt: fields[13] as DateTime?,
+      isDeadLetter: fields[14] as bool,
+      dedupeFingerprint: fields[15] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, TransactionModel obj) {
     writer
-      ..writeByte(12)
+      ..writeByte(16)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -59,7 +63,15 @@ class TransactionModelAdapter extends TypeAdapter<TransactionModel> {
       ..writeByte(10)
       ..write(obj.webhookError)
       ..writeByte(11)
-      ..write(obj.webhookSentAt);
+      ..write(obj.webhookSentAt)
+      ..writeByte(12)
+      ..write(obj.retryCount)
+      ..writeByte(13)
+      ..write(obj.nextRetryAt)
+      ..writeByte(14)
+      ..write(obj.isDeadLetter)
+      ..writeByte(15)
+      ..write(obj.dedupeFingerprint);
   }
 
   @override

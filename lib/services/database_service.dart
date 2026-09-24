@@ -16,6 +16,7 @@
 
 import 'dart:convert';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/transaction_model.dart';
 import '../models/webhook_preset.dart';
@@ -148,42 +149,35 @@ class DatabaseService {
     // clear() = hapus semua data di laci, tapi lacinya tetap ada
   }
 
-  // ── IDEMPOTENCY / DEDUPLICATION ───────────────────────────
-
-  /// Memeriksa apakah transaksi serupa sudah tercatat dalam kurun waktu [window] (default 90 detik).
-  /// Mencegah trigger webhook ganda akibat rebroadcast notifikasi Android OS.
-  /// Kriteria duplikat:
-  /// 1. Nominal sama (`amount == other.amount`)
-  /// 2. Sumber aplikasi sama (`appSource == other.appSource`)
-  /// 3. Selisih waktu transaksi <= [window]
-  /// 4. Salah satu terpenuhi:
-  ///    - Pesan mentah sama persis (`rawMessage == other.rawMessage`), ATAU
-  ///    - Nama pembayar spesifik sama persis (bukan fallback 'Pelanggan'/'Sistem')
+  // P0 HARDENING: EVENT IDENTITY & DEDUPLICATION
   static Future<bool> isDuplicateTransaction(
     TransactionModel transaction, {
-    Duration window = const Duration(seconds: 90),
+    Duration window = const Duration(hours: 1), // 1 hour window for aggressive deduplication
   }) async {
     final box = await _box;
     final all = box.values;
     for (final existing in all) {
       if (existing.id == transaction.id) continue;
-      if (existing.amount == transaction.amount &&
-          existing.appSource == transaction.appSource) {
-        final timeDiff =
-            transaction.dateTime.difference(existing.dateTime).abs();
-        if (timeDiff <= window) {
-          final sameRaw =
-              existing.rawMessage.trim() == transaction.rawMessage.trim();
-          final hasValidPayer = transaction.payerName.isNotEmpty &&
-              transaction.payerName != 'Pelanggan' &&
-              transaction.payerName != 'Sistem';
-          final samePayer = hasValidPayer &&
-              (existing.payerName.toLowerCase() ==
-                  transaction.payerName.toLowerCase());
-
-          if (sameRaw || samePayer) {
+      
+      final timeDiff = transaction.dateTime.difference(existing.dateTime).abs();
+      if (timeDiff <= window) {
+        // Deterministic fingerprint matching
+        final hasFingerprint = existing.dedupeFingerprint.isNotEmpty && transaction.dedupeFingerprint.isNotEmpty;
+        if (hasFingerprint) {
+          if (existing.dedupeFingerprint == transaction.dedupeFingerprint) {
             return true;
+          } else {
+            // P0 HARDENING: If fingerprints exist and differ, they are GUARANTEED separate transactions.
+            // Do NOT fall back to rawMessage matching, which would falsely dedupe identical amounts from same payer.
+            continue;
           }
+        }
+
+        // Fallback for older records (before fingerprinting was introduced)
+        if (existing.amount == transaction.amount &&
+            existing.appSource == transaction.appSource) {
+          final sameRaw = existing.rawMessage.trim() == transaction.rawMessage.trim();
+          if (sameRaw) return true;
         }
       }
     }
@@ -248,16 +242,57 @@ class DatabaseService {
     await box.put('webhook_url', url.trim());
   }
 
+  static const _secureStorage = FlutterSecureStorage();
+
   /// Ambil Webhook Secret untuk HMAC-SHA256 signature signing (opsional, untuk Gastonyk produksi).
   static Future<String> getWebhookSecret() async {
+    // P1 HARDENING: Migrate from Hive to Keystore-backed storage
+    final secureSecret = await _secureStorage.read(key: 'webhook_secret');
+    if (secureSecret != null) {
+      return secureSecret;
+    }
+    
+    // Fallback/Migration
     final box = await _settingsBox;
-    return box.get('webhook_secret', defaultValue: '') as String;
+    final oldSecret = box.get('webhook_secret', defaultValue: '') as String;
+    if (oldSecret.isNotEmpty) {
+      await _secureStorage.write(key: 'webhook_secret', value: oldSecret);
+      await box.delete('webhook_secret');
+    }
+    return oldSecret;
   }
 
   /// Simpan Webhook Secret.
   static Future<void> setWebhookSecret(String secret) async {
+    await _secureStorage.write(key: 'webhook_secret', value: secret.trim());
+    
+    // Ensure it's removed from plaintext Hive
     final box = await _settingsBox;
-    await box.put('webhook_secret', secret.trim());
+    await box.delete('webhook_secret');
+  }
+
+  /// Ambil Custom Authorization Header.
+  static Future<String> getAuthHeader() async {
+    final secureAuth = await _secureStorage.read(key: 'auth_header');
+    if (secureAuth != null) {
+      return secureAuth;
+    }
+
+    final box = await _settingsBox;
+    final oldAuth = box.get('auth_header', defaultValue: '') as String;
+    if (oldAuth.isNotEmpty) {
+      await _secureStorage.write(key: 'auth_header', value: oldAuth);
+      await box.delete('auth_header');
+    }
+    return oldAuth;
+  }
+
+  /// Simpan Custom Authorization Header.
+  static Future<void> setAuthHeader(String header) async {
+    await _secureStorage.write(key: 'auth_header', value: header.trim());
+    
+    final box = await _settingsBox;
+    await box.delete('auth_header');
   }
 
   /// Ambil URL endpoint cadangan (failover) saat endpoint utama mengalami kendala jaringan.
@@ -296,17 +331,7 @@ class DatabaseService {
     await box.put('forward_financial_only', enabled);
   }
 
-  /// Ambil Custom Header / Auth Token (opsional).
-  static Future<String> getAuthHeader() async {
-    final box = await _settingsBox;
-    return box.get('auth_header', defaultValue: '') as String;
-  }
 
-  /// Simpan Custom Header / Auth Token.
-  static Future<void> setAuthHeader(String header) async {
-    final box = await _settingsBox;
-    await box.put('auth_header', header.trim());
-  }
 
   /// Ambil format payload ('raw' atau 'json_string').
   static Future<String> getPayloadFormat() async {
@@ -434,5 +459,32 @@ class DatabaseService {
     await setAuthHeader(target.authHeader ?? '');
     await setWebhookSecret(target.webhookSecret ?? '');
     await setPayloadFormat(target.payloadFormat);
+  }
+
+  // ── P1 HARDENING: DATA MINIMIZATION ─────────────────────────
+
+  /// Membersihkan data lama untuk meminimalisasi penyimpanan rawMessage yang sensitif.
+  /// Dipanggil secara periodik (misal: saat aplikasi dimulai).
+  static Future<void> cleanupOldTransactions() async {
+    final box = await _box;
+    final now = DateTime.now();
+    
+    // 1. Hapus transaksi sukses yang lebih tua dari 7 hari (sudah ada di server)
+    // 2. Kosongkan rawMessage untuk transaksi sukses yang lebih tua dari 24 jam (sudah direkonsiliasi)
+    for (final key in box.keys) {
+      final tx = box.get(key);
+      if (tx == null) continue;
+
+      final age = now.difference(tx.dateTime);
+      
+      if (tx.webhookStatus == 'success' || tx.webhookStatus == 'duplicate_ack') {
+        if (age.inDays >= 7) {
+          await box.delete(key);
+        } else if (age.inHours >= 24 && tx.rawMessage.isNotEmpty && tx.rawMessage != '[STRIPPED FOR PRIVACY]') {
+          final stripped = tx.copyWith(rawMessage: '[STRIPPED FOR PRIVACY]');
+          await box.put(key, stripped);
+        }
+      }
+    }
   }
 }

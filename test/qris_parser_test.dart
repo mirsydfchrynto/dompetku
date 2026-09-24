@@ -687,31 +687,34 @@ void main() {
         expect(result.type, equals('simulator_in'));
       });
 
-      test('fallback otomatis mendeteksi QRIS dari app baru', () {
+      test('fallback otomatis mendeteksi QRIS dari app baru - SEKARANG HARUS DITOLAK (HARDENED)', () {
         final result = QrisParser.parse(
           title: 'Bank Digital Baru',
           body: 'Transaksi QRIS Rp500.000 sukses dari pengirim Andi',
           package: 'com.bankdigital.baru',
         );
 
-        expect(result, isNotNull);
-        expect(result!.amount, equals(500000.0));
-        expect(result.appSource, equals('Bank Digital Baru'));
-        expect(result.type, equals('bank_digital_baru_in'));
-        expect(result.payerName, contains('Andi'));
+        expect(result, isNull);
       });
 
-      test('fallback otomatis mendeteksi transfer masuk dari app bank baru', () {
+      test('fallback otomatis mendeteksi transfer masuk dari app bank baru - SEKARANG HARUS DITOLAK (HARDENED)', () {
         final result = QrisParser.parse(
           title: 'Bank Aladin',
           body: 'Transfer masuk sebesar Rp 300.000 dari KURNIAWAN ke rekening anda',
           package: 'com.bankaladin.app',
         );
 
-        expect(result, isNotNull);
-        expect(result!.amount, equals(300000.0));
-        expect(result.type, equals('bank_aladin_in'));
-        expect(result.payerName, equals('KURNIAWAN'));
+        expect(result, isNull);
+      });
+
+      test('P0 HARDENING: unknown chat app spoofing financial text is REJECTED', () {
+        final result = QrisParser.parse(
+          title: 'Line App',
+          body: 'qris uang masuk berhasil diterima Rp 50.000',
+          package: 'jp.naver.line.android',
+        );
+
+        expect(result, isNull);
       });
     });
 

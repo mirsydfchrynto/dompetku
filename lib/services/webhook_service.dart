@@ -277,23 +277,55 @@ class WebhookService {
         }
       }
 
-      final isSuccess = response.statusCode >= 200 && response.statusCode < 300;
+      final code = response.statusCode;
+      final isSuccess = code >= 200 && code < 300;
+      final isDuplicateAck = code == 409;
+      final isTerminalError = code == 400 || code == 401 || code == 403 || code == 422;
+
+      String finalStatus = 'failed';
+      bool isDeadLetter = false;
+      int newRetryCount = transaction.retryCount;
+      DateTime? nextRetryAt;
+
+      if (isSuccess || isDuplicateAck) {
+        finalStatus = 'success';
+      } else if (isTerminalError) {
+        finalStatus = 'dead_letter';
+        isDeadLetter = true;
+      } else {
+        finalStatus = 'failed';
+        newRetryCount += 1;
+        // Bounded retry up to 10 times, exponential backoff (rough approximation)
+        if (newRetryCount >= 10) {
+          finalStatus = 'dead_letter';
+          isDeadLetter = true;
+        } else {
+          nextRetryAt = DateTime.now().add(Duration(minutes: newRetryCount * 5));
+        }
+      }
+
+      final errorMsg = (isSuccess || isDuplicateAck)
+          ? null
+          : 'Server merespons $code: ${response.body.isNotEmpty ? (response.body.length > 100 ? '${response.body.substring(0, 100)}...' : response.body) : 'Error'}';
 
       final updated = transaction.copyWith(
-        webhookStatus: isSuccess ? 'success' : 'failed',
-        webhookHttpCode: response.statusCode,
+        webhookStatus: finalStatus,
+        webhookHttpCode: code,
         webhookSentAt: DateTime.now(),
-        webhookError: isSuccess
-            ? null
-            : 'Server merespons ${response.statusCode}: ${response.body.isNotEmpty ? (response.body.length > 100 ? '${response.body.substring(0, 100)}...' : response.body) : 'Error'}',
+        webhookError: errorMsg,
+        retryCount: newRetryCount,
+        isDeadLetter: isDeadLetter,
+        nextRetryAt: nextRetryAt,
       );
       await DatabaseService.updateTransaction(updated);
 
       return WebhookResult(
-        isSuccess: isSuccess,
-        statusCode: response.statusCode,
-        errorMessage: isSuccess ? null : 'HTTP ${response.statusCode}',
+        isSuccess: isSuccess || isDuplicateAck,
+        statusCode: code,
+        errorMessage: (isSuccess || isDuplicateAck) ? null : 'HTTP $code',
       );
+
+
     } on TimeoutException {
       // ── FAILOVER UPON TIMEOUT ──────────────────────────────
       final fallbackResp = await _tryFallbackPost(
@@ -320,10 +352,17 @@ class WebhookService {
         );
       }
 
+      final newRetryCount = transaction.retryCount + 1;
+      final isDeadLetter = newRetryCount >= 10;
+      final nextRetryAt = isDeadLetter ? null : DateTime.now().add(Duration(minutes: newRetryCount * 5));
+
       final updated = transaction.copyWith(
-        webhookStatus: 'failed',
+        webhookStatus: isDeadLetter ? 'dead_letter' : 'failed',
         webhookSentAt: DateTime.now(),
         webhookError: 'Request timeout (10 detik)',
+        retryCount: newRetryCount,
+        isDeadLetter: isDeadLetter,
+        nextRetryAt: nextRetryAt,
       );
       await DatabaseService.updateTransaction(updated);
       return const WebhookResult(
@@ -356,10 +395,17 @@ class WebhookService {
         );
       }
 
+      final newRetryCount = transaction.retryCount + 1;
+      final isDeadLetter = newRetryCount >= 10;
+      final nextRetryAt = isDeadLetter ? null : DateTime.now().add(Duration(minutes: newRetryCount * 5));
+
       final updated = transaction.copyWith(
-        webhookStatus: 'failed',
+        webhookStatus: isDeadLetter ? 'dead_letter' : 'failed',
         webhookSentAt: DateTime.now(),
         webhookError: 'Koneksi gagal: ${e.message}',
+        retryCount: newRetryCount,
+        isDeadLetter: isDeadLetter,
+        nextRetryAt: nextRetryAt,
       );
       await DatabaseService.updateTransaction(updated);
       return WebhookResult(
@@ -368,9 +414,10 @@ class WebhookService {
       );
     } on FormatException catch (e) {
       final updated = transaction.copyWith(
-        webhookStatus: 'failed',
+        webhookStatus: 'dead_letter',
         webhookSentAt: DateTime.now(),
         webhookError: 'URL tidak valid: ${e.message}',
+        isDeadLetter: true,
       );
       await DatabaseService.updateTransaction(updated);
       return WebhookResult(
@@ -378,10 +425,17 @@ class WebhookService {
         errorMessage: 'URL tidak valid: ${e.message}',
       );
     } catch (e) {
+      final newRetryCount = transaction.retryCount + 1;
+      final isDeadLetter = newRetryCount >= 10;
+      final nextRetryAt = isDeadLetter ? null : DateTime.now().add(Duration(minutes: newRetryCount * 5));
+
       final updated = transaction.copyWith(
-        webhookStatus: 'failed',
+        webhookStatus: isDeadLetter ? 'dead_letter' : 'failed',
         webhookSentAt: DateTime.now(),
         webhookError: e.toString(),
+        retryCount: newRetryCount,
+        isDeadLetter: isDeadLetter,
+        nextRetryAt: nextRetryAt,
       );
       await DatabaseService.updateTransaction(updated);
       return WebhookResult(
