@@ -1,3 +1,12 @@
+import java.util.Properties
+import java.io.FileInputStream
+
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -25,12 +34,14 @@ android {
         versionName = flutter.versionName
     }
 
+// Removed from here
+
     signingConfigs {
         create("release") {
-            storeFile = file("dompetku-release.keystore")
-            storePassword = "dompetku123"
-            keyAlias = "dompetku"
-            keyPassword = "dompetku123"
+            storeFile = keystoreProperties["storeFile"]?.let { file(it.toString()) }
+            storePassword = keystoreProperties["storePassword"]?.toString()
+            keyAlias = keystoreProperties["keyAlias"]?.toString()
+            keyPassword = keystoreProperties["keyPassword"]?.toString()
         }
     }
 
