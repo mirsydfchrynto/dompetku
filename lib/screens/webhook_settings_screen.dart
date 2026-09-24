@@ -34,7 +34,6 @@ class _WebhookSettingsScreenState extends State<WebhookSettingsScreen> {
   String _activeUrl = '';
   String _payloadFormat = 'raw';
   bool _isAutoForward = true;
-  bool _forwardFinancialOnly = true;
   String _fallbackUrl = '';
   String _webhookSecret = '';
   bool _isTestingFallback = false;
@@ -55,7 +54,6 @@ class _WebhookSettingsScreenState extends State<WebhookSettingsScreen> {
     final url = await DatabaseService.getWebhookUrl();
     final format = await DatabaseService.getPayloadFormat();
     final isAuto = await DatabaseService.isAutoForwardEnabled();
-    final financialOnly = await DatabaseService.isForwardFinancialOnly();
     final fallbackUrl = await DatabaseService.getFallbackWebhookUrl();
     final secret = await DatabaseService.getWebhookSecret();
 
@@ -65,7 +63,6 @@ class _WebhookSettingsScreenState extends State<WebhookSettingsScreen> {
         _activeUrl = url;
         _payloadFormat = format;
         _isAutoForward = isAuto;
-        _forwardFinancialOnly = financialOnly;
         _fallbackUrl = fallbackUrl;
         _webhookSecret = secret;
         _isLoading = false;
@@ -1395,30 +1392,6 @@ class _WebhookSettingsScreenState extends State<WebhookSettingsScreen> {
                         ),
                         value: _isAutoForward,
                         activeTrackColor: const Color(0xFF00897B),
-                        onChanged: (val) async {
-                          setState(() => _isAutoForward = val);
-                          await DatabaseService.setAutoForwardEnabled(val);
-                        },
-                      ),
-                      const Divider(),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text(
-                          'Hanya Notifikasi Finansial',
-                          style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
-                        ),
-                        subtitle: const Text(
-                          'Memblokir kode OTP, pesan chat biasa, dan promo non-transaksi.',
-                          style: TextStyle(fontSize: 11.5),
-                        ),
-                        value: _forwardFinancialOnly,
-                        activeTrackColor: const Color(0xFF00897B),
-                        onChanged: (val) async {
-                          setState(() => _forwardFinancialOnly = val);
-                          await DatabaseService.setForwardFinancialOnly(val);
-                        },
-                      ),
-                      const Divider(),
                       const SizedBox(height: 6),
                       Text(
                         'Format Pesan Kolom message:',

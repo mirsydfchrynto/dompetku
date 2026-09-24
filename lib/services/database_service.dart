@@ -319,17 +319,8 @@ class DatabaseService {
     await box.put('is_auto_forward_enabled', enabled);
   }
 
-  /// Cek apakah hanya kirim notifikasi finansial / QRIS.
-  static Future<bool> isForwardFinancialOnly() async {
-    final box = await _settingsBox;
-    return box.get('forward_financial_only', defaultValue: true) as bool;
-  }
 
-  /// Set opsi filter hanya finansial.
-  static Future<void> setForwardFinancialOnly(bool enabled) async {
-    final box = await _settingsBox;
-    await box.put('forward_financial_only', enabled);
-  }
+
 
 
 

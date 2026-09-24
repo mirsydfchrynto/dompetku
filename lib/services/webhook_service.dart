@@ -236,6 +236,7 @@ class WebhookService {
         'amount': transaction.amount,
         'id': transaction.id,
         'appSource': transaction.appSource,
+        'dedupe_fingerprint': transaction.dedupeFingerprint,
         if (transaction.orderCode != null) 'order_code': transaction.orderCode,
       };
 

@@ -3,15 +3,7 @@
     <!-- ════════════════════════════════════════════════════════
          PERMISSIONS
          Izin-izin yang dibutuhkan aplikasi DompetKu
-
-         BIND_NOTIFICATION_LISTENER_SERVICE:
-           Izin utama untuk membaca notifikasi dari semua aplikasi.
-           User harus aktifkan secara manual di Settings.
-
-         FOREGROUND_SERVICE:
-           Izin untuk menjalankan service di background.
          ════════════════════════════════════════════════════════ -->
-    <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />

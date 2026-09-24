@@ -136,28 +136,6 @@ class AppNotificationListenerService {
               '[DompetKu] QRIS Transaksi terdeteksi: ${transaction.appSource} Rp ${transaction.amount}');
         }
         await _processAndForward(transaction);
-      } else {
-        // Jika bukan format finansial standar, cek apakah user mengaktifkan tangkap semua notifikasi
-        final onlyFinancial = await DatabaseService.isForwardFinancialOnly();
-        if (!onlyFinancial && (title.isNotEmpty || body.isNotEmpty)) {
-          final rawTx = TransactionModel(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            amount: 0,
-            type: 'raw_notif',
-            appSource: title.isNotEmpty ? title : 'Notifikasi',
-            payerName: 'Sistem',
-            dateTime: DateTime.now(),
-            rawMessage: title.isNotEmpty ? '$title: $body' : body,
-            appPackage: package,
-          );
-          final isDuplicate =
-              await DatabaseService.isDuplicateTransaction(rawTx);
-          if (isDuplicate) {
-            debugPrint('[DompetKu] Notifikasi raw duplikat diabaikan');
-            return;
-          }
-          await _processAndForward(rawTx);
-        }
       }
     } catch (e, stack) {
       debugPrint('[DompetKu] Error in handleIncomingNotification: $e\n$stack');
