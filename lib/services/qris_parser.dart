@@ -23,6 +23,7 @@
 
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import '../models/transaction_model.dart';
 
 // ── CLASS KONFIGURASI PER BANK & E-WALLET ────────────────────
@@ -560,25 +561,27 @@ class QrisParser {
       payerPattern: _universalPayerPattern,
     );
 
-    // ── SIMULATOR INTERNAL DOMPETKU ───────────────────────────
-    parsers['com.dompetku.simulator'] = _AppParser(
-      name: 'Simulator',
-      baseCode: 'simulator',
-      keywords: [
-        'qris',
-        'pembayaran',
-        'qr',
-        'transfer',
-        'sukses',
-        'berhasil',
-        'uang masuk',
-        'uang keluar',
-        'tarik tunai',
-        'tarik saldo',
-      ],
-      amountPattern: _universalAmountPattern,
-      payerPattern: _universalPayerPattern,
-    );
+    // ── P3 HARDENING: SIMULATOR INTERNAL DOMPETKU HANYA DI DEBUG MODE
+    if (kDebugMode) {
+      parsers['com.dompetku.simulator'] = _AppParser(
+        name: 'Simulator',
+        baseCode: 'simulator',
+        keywords: [
+          'qris',
+          'pembayaran',
+          'qr',
+          'transfer',
+          'sukses',
+          'berhasil',
+          'uang masuk',
+          'uang keluar',
+          'tarik tunai',
+          'tarik saldo',
+        ],
+        amountPattern: _universalAmountPattern,
+        payerPattern: _universalPayerPattern,
+      );
+    }
 
     return parsers;
   }

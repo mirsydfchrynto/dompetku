@@ -215,9 +215,9 @@ class DatabaseService {
     return await Hive.openBox(_settingsBoxName);
   }
 
-  /// Default webhook endpoint (Gastonyk Official Webhook via ADB reverse / local)
+  /// Default webhook endpoint (Gastonyk Official Webhook Production)
   static const String defaultWebhookUrl =
-      'http://127.0.0.1:8000/api/webhook/dompetku';
+      'https://gastonyk.com/api/webhook/dompetku';
 
   /// Ambil URL endpoint webhook yang tersimpan.
   static Future<String> getWebhookUrl() async {
