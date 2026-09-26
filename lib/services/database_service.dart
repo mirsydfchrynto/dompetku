@@ -360,6 +360,13 @@ class DatabaseService {
           .map((item) => WebhookPreset.fromJson(
               Map<String, dynamic>.from(jsonDecode(item as String))))
           .toList();
+          
+      // HOTFIX: Auto-inject Gastonyk Live Cloudflare preset for upgrades
+      if (!list.any((p) => p.id == 'preset_gastonyk_production')) {
+        list.insert(0, _defaultPresets().first);
+        await saveWebhookPresets(list);
+      }
+          
       return list;
     } catch (_) {
       final initial = _defaultPresets();
@@ -372,16 +379,18 @@ class DatabaseService {
   static List<WebhookPreset> _defaultPresets() {
     return [
       WebhookPreset(
-        id: 'preset_gastonyk',
-        name: 'Gastonyk Official (ADB USB 127.0.0.1)',
-        url: 'http://127.0.0.1:8000/api/webhook/dompetku',
+        id: 'preset_gastonyk_production',
+        name: 'Gastonyk Live (Cloudflare Tunnel)',
+        url: 'https://suspended-contractors-quilt-minus.trycloudflare.com/api/webhook/dompetku',
+        webhookSecret: '53e9dc23219b33174b44da5b2db0e9de5d439745aea53fb4c755ed48b07d91c3',
         payloadFormat: 'json_string',
         isDefault: true,
       ),
       WebhookPreset(
-        id: 'preset_gastonyk_wifi',
-        name: 'Gastonyk Wi-Fi (192.168.100.61)',
-        url: 'http://192.168.100.61:8000/api/webhook/dompetku',
+        id: 'preset_gastonyk_local',
+        name: 'Gastonyk Local (ADB USB)',
+        url: 'http://127.0.0.1:8000/api/webhook/dompetku',
+        webhookSecret: '53e9dc23219b33174b44da5b2db0e9de5d439745aea53fb4c755ed48b07d91c3',
         payloadFormat: 'json_string',
         isDefault: false,
       ),
